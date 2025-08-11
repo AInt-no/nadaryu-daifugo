@@ -739,19 +739,31 @@
             }
         }
 
+        // =========================================================================
+        // 【修正】特殊効果のロジックを修正
+        // =========================================================================
         function handleSpecialCards(playedCards, gameState) {
-            const cardNum = (playedCards.find(c => c.suit !== 'JOKER') || playedCards[0]).number;
+            const player = gameState.players.find(p => p.id === gameState.currentPlayerId);
+            const nonJokers = playedCards.filter(c => c.suit !== 'JOKER');
+            const uniqueNumbers = [...new Set(nonJokers.map(c => c.number))];
+            const cardNum = uniqueNumbers[0] || (playedCards.find(c => c.suit === 'JOKER') ? 0 : null);
             const cardCount = playedCards.length;
+            
             let fieldCleared = false;
             let skipTurn = false;
-            const player = gameState.players.find(p => p.id === gameState.currentPlayerId);
             
-            if (cardCount >= 4 || (cardNum === 3 && cardCount === 3)) {
+            // 革命チェック (ジョーカーを含む4枚、または3が3枚)
+            const isFourCardRevolution = (cardCount === 4 && uniqueNumbers.length <= 1);
+            const isThreeThreesRevolution = (cardCount === 3 && nonJokers.length === 3 && cardNum === 3);
+
+            if (isFourCardRevolution || isThreeThreesRevolution) {
                 gameState.isRevolution = !gameState.isRevolution;
                 gameState.log.push(`${player.name}さんが革命を起こしました！`);
             }
+            
+            // イレブンバック (ジョーカーを含めた合計枚数が奇数)
             if (cardNum === 11 && cardCount % 2 !== 0) {
-                gameState.isElevenBack = !gameState.isElevenBack;
+                gameState.isElevenBack = !gameState.isElevenBack; // isRevolutionになっていた不具合を修正
                 gameState.log.push(`${player.name}さんがイレブンバック！`);
             }
             
