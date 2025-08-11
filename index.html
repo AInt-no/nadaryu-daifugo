@@ -635,19 +635,26 @@
                     newGameState.hands[currentUser.uid] = newHand;
                     
                     let updatedPlayers = newGameState.players.map(p => p.id === currentUser.uid ? { ...p, cardCount: newHand.length } : p);
-                    
+                    newGameState.players = updatedPlayers;
+
                     const playedCardNumber = (selectedCards.find(c => c.suit !== 'JOKER') || selectedCards[0]).number;
                     const playedCardCount = selectedCards.length;
                     const player = newGameState.players.find(p => p.id === currentUser.uid);
 
-                    let isFinished = false;
+                    let playerHasFinished = false;
                     if (newHand.length === 0) {
-                        isFinished = true;
+                        playerHasFinished = true;
                         newGameState.rankings.push(currentUser.uid);
                         newGameState.log.push(`${player.name}さんがあがりました！`);
                     }
 
-                    if (!isFinished && (playedCardNumber === 7 || playedCardNumber === 10)) {
+                    // 【修正】あがった場合の処理
+                    if (playerHasFinished) {
+                        newGameState.field = { cards: [], lastPlayerId: null, suitLock: null };
+                        newGameState.passCount = 0;
+                        newGameState.currentPlayerId = getNextPlayerId(newGameState);
+                        newGameState.log.push("場が流れます。");
+                    } else if (playedCardNumber === 7 || playedCardNumber === 10) {
                         newGameState.status = 'awaiting_selection';
                         newGameState.pendingAction = {
                             type: playedCardNumber === 7 ? '7-pass' : '10-discard',
@@ -664,14 +671,13 @@
                         if (!effectResult.fieldCleared) {
                            newGameState.field = { cards: selectedCards, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
                            newGameState.passCount = 0;
-                           if (!isFinished && !effectResult.skipTurn) {
+                           if (!effectResult.skipTurn) {
                                newGameState.currentPlayerId = getNextPlayerId(newGameState);
                            }
                         } else {
                             newGameState.field = { cards: [], lastPlayerId: null, suitLock: null };
                             newGameState.passCount = 0;
-                            if (!isFinished) newGameState.currentPlayerId = currentUser.uid;
-                            else newGameState.currentPlayerId = getNextPlayerId(newGameState);
+                            newGameState.currentPlayerId = currentUser.uid;
                         }
                         
                         if (effectResult.fieldCleared && newGameState.isElevenBack) {
@@ -680,7 +686,6 @@
                         }
                     }
                     
-                    newGameState.players = updatedPlayers;
                     newGameState.lastActionTimestamp = new Date();
                     
                     const activePlayersCount = newGameState.players.filter(p => !newGameState.rankings.includes(p.id)).length;
@@ -739,20 +744,66 @@
             }
         }
 
-        // =========================================================================
-        // 【修正】特殊効果のロジックを修正
-        // =========================================================================
+        async function declareDobon() {
+            const { hands, field, players } = localGameState;
+            const myHand = hands[currentUser.uid];
+            
+            if (myHand.length < 2) return showMessage("ドボンは手札が2枚以上ないと宣言できません。");
+            if (field.lastPlayerId === currentUser.uid) return showMessage("自分が出したカードでドボンはできません。");
+            if (!field.cards || field.cards.length === 0) return showMessage("場にカードがありません。");
+
+            const handSum = myHand.reduce((sum, card) => sum + getDobonValue(card), 0);
+            const fieldSum = field.cards.reduce((sum, card) => sum + getDobonValue(card), 0);
+
+            if (handSum !== fieldSum) {
+                return showMessage(`ドボン失敗！ 手札合計: ${handSum}, 場の合計: ${fieldSum}`);
+            }
+            
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const roomDoc = await transaction.get(roomRef);
+                    if (!roomDoc.exists()) throw new Error("ルームデータが見つかりません。");
+                    
+                    let gameState = roomDoc.data().gameState;
+                    
+                    // 【修正】ドボン成功時の処理
+                    gameState.rankings.push(currentUser.uid); // ドボンした人をランキングに追加
+                    const winnerPlayer = gameState.players.find(p => p.id === currentUser.uid);
+                    gameState.log.push(`🎉 ${winnerPlayer.name}さんがドボンであがりました！`);
+
+                    gameState.field = { cards: [], lastPlayerId: null, suitLock: null }; // 場を流す
+                    gameState.currentPlayerId = getNextPlayerId(gameState); // 次の人が親
+                    gameState.log.push("場が流れます。");
+                    
+                    // 残り1人か確認
+                    const activePlayersCount = gameState.players.filter(p => !gameState.rankings.includes(p.id)).length;
+                    if (activePlayersCount <= 1) {
+                        const lastPlayer = gameState.players.find(p => !gameState.rankings.includes(p.id));
+                        if(lastPlayer && !gameState.rankings.includes(lastPlayer.id)) {
+                            gameState.rankings.push(lastPlayer.id);
+                        }
+                        gameState.status = 'finished';
+                    }
+
+                    transaction.update(roomRef, { gameState });
+                });
+            } catch (error) {
+                console.error("ドボン処理エラー:", error);
+                showMessage(error.message);
+            }
+        }
+
         function handleSpecialCards(playedCards, gameState) {
             const player = gameState.players.find(p => p.id === gameState.currentPlayerId);
             const nonJokers = playedCards.filter(c => c.suit !== 'JOKER');
             const uniqueNumbers = [...new Set(nonJokers.map(c => c.number))];
-            const cardNum = uniqueNumbers[0] || (playedCards.find(c => c.suit === 'JOKER') ? 0 : null);
+            const cardNum = uniqueNumbers[0] || (playedCards.find(c => c.suit === 'JOKER') ? playedCards[0].number : null);
             const cardCount = playedCards.length;
             
             let fieldCleared = false;
             let skipTurn = false;
             
-            // 革命チェック (ジョーカーを含む4枚、または3が3枚)
             const isFourCardRevolution = (cardCount === 4 && uniqueNumbers.length <= 1);
             const isThreeThreesRevolution = (cardCount === 3 && nonJokers.length === 3 && cardNum === 3);
 
@@ -761,9 +812,8 @@
                 gameState.log.push(`${player.name}さんが革命を起こしました！`);
             }
             
-            // イレブンバック (ジョーカーを含めた合計枚数が奇数)
             if (cardNum === 11 && cardCount % 2 !== 0) {
-                gameState.isElevenBack = !gameState.isElevenBack; // isRevolutionになっていた不具合を修正
+                gameState.isElevenBack = !gameState.isElevenBack;
                 gameState.log.push(`${player.name}さんがイレブンバック！`);
             }
             
@@ -805,6 +855,13 @@
                 return 15 - (strength - 3);
             }
             return strength;
+        }
+
+        // 【修正】ドボンの計算ルール変更
+        function getDobonValue(card) {
+            if (card.suit === 'JOKER') return 0;
+            // Jは11, Qは12, Kは13, Aは1として、カードの数字をそのまま返す
+            return card.number;
         }
         
         function getNextPlayerId(gameState) {
@@ -981,7 +1038,9 @@
             const isMyTurn = currentPlayerId === currentUser.uid && gameState.status === 'playing';
             document.getElementById('play-card-btn').disabled = !isMyTurn;
             document.getElementById('pass-btn').disabled = !isMyTurn || !field?.cards || field.cards.length === 0;
-            document.getElementById('dobon-btn').disabled = true;
+            
+            const canDobon = myHand.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid;
+            document.getElementById('dobon-btn').disabled = !canDobon;
         }
         
         function showGameOverUI(gameState) {
@@ -1129,7 +1188,7 @@
         document.getElementById('start-game-btn').addEventListener('click', startGame);
         document.getElementById('play-card-btn').addEventListener('click', playCards);
         document.getElementById('pass-btn').addEventListener('click', passTurn);
-        document.getElementById('dobon-btn').addEventListener('click', () => showMessage("ドボン機能は現在調整中です。"));
+        document.getElementById('dobon-btn').addEventListener('click', declareDobon);
         document.getElementById('next-game-btn').addEventListener('click', prepareNextGame);
         document.getElementById('leave-room-btn').addEventListener('click', confirmAndLeave);
         leaveGameBtn.addEventListener('click', confirmAndLeave);
