@@ -127,6 +127,33 @@
         .card-display-area .card:first-child {
              margin-left: 0;
         }
+        .designated-suit {
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            opacity: 0.7;
+        }
+        .suit-button {
+            font-size: 2rem;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid #ccc;
+            background-color: #fff;
+            margin: 0 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .suit-button:hover:not(:disabled) {
+            transform: scale(1.1);
+            border-color: #3b82f6;
+        }
+        .suit-button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
 
 
         #reload-btn {
@@ -269,26 +296,33 @@
                 <button id="received-cards-ok-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">OK</button>
             </div>
         </div>
-        
         <div id="dobon-success-modal" class="hidden modal-overlay">
             <div class="modal-content bg-yellow-300 text-black w-full max-w-2xl">
                 <h2 class="text-5xl font-bold mb-4 text-purple-700">ドボン！</h2>
                 <div id="dobon-player-info" class="mb-4 text-lg font-semibold"></div>
                 <div id="dobon-hand-container" class="card-display-area"></div>
-                
                 <div class="my-6 border-t-2 border-gray-400"></div>
-
                 <p class="text-lg font-semibold">場のカード</p>
                 <div id="dobon-field-container" class="card-display-area"></div>
-                
                 <div class="mt-8">
                     <button id="dobon-continue-btn" class="hidden bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg">ゲームに戻る</button>
                     <p id="dobon-wait-message" class="hidden text-gray-700">次のプレイヤーがゲームに戻るのを待っています...</p>
                 </div>
             </div>
         </div>
+        <div id="joker-suit-modal" class="hidden modal-overlay">
+            <div class="modal-content bg-gray-800 text-white w-full max-w-md">
+                <h2 class="text-2xl font-bold mb-4">ジョーカーのスートを選択</h2>
+                <p class="mb-6">ジョーカーをどのスートとして扱いますか？</p>
+                <div id="joker-suit-buttons" class="flex justify-center gap-4">
+                    <button class="suit-button text-gray-800" data-suit="S">♠</button>
+                    <button class="suit-button text-red-500" data-suit="H">♥</button>
+                    <button class="suit-button text-red-500" data-suit="D">♦</button>
+                    <button class="suit-button text-gray-800" data-suit="C">♣</button>
+                </div>
+            </div>
+        </div>
     </div>
-
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
@@ -330,6 +364,7 @@
         const fiveSkipModal = document.getElementById('5skip-modal');
         const receivedCardsModal = document.getElementById('received-cards-modal');
         const dobonSuccessModal = document.getElementById('dobon-success-modal');
+        const jokerSuitModal = document.getElementById('joker-suit-modal');
         const leaveGameBtn = document.getElementById('leave-game-btn');
 
         onAuthStateChanged(auth, async (user) => {
@@ -614,15 +649,26 @@
         async function playCards() {
             if (selectedCards.length === 0) return;
             
+            const hasJoker = selectedCards.some(c => c.suit === 'JOKER');
+            const hasNumberCard = selectedCards.some(c => c.suit !== 'JOKER');
+
+            if (hasJoker && hasNumberCard) {
+                promptJokerSuit();
+            } else {
+                executePlay(selectedCards);
+            }
+        }
+
+        async function executePlay(cardsToPlay) {
             const { hands, currentPlayerId, field, isRevolution, isElevenBack } = localGameState;
             if (currentUser.uid !== currentPlayerId) return showMessage("あなたのターンではありません。");
             
-            const validation = isValidPlay(selectedCards, field, isRevolution, isElevenBack);
+            const validation = isValidPlay(cardsToPlay, field, isRevolution, isElevenBack);
             if (!validation.valid) return showMessage(validation.message);
 
             const myHand = hands[currentUser.uid];
-            if (myHand.length === selectedCards.length) {
-                const lastCard = selectedCards.find(c => c.suit !== 'JOKER') || selectedCards[0];
+            if (myHand.length === cardsToPlay.length) {
+                const lastCard = cardsToPlay.find(c => c.suit !== 'JOKER') || cardsToPlay[0];
                 const strongestCardNumber = isRevolution ? 3 : 2;
                 if (lastCard.suit === 'JOKER' || lastCard.number === strongestCardNumber) {
                     return showMessage("反則あがりです！ジョーカーや最強のカード(2または3)ではあがれません。");
@@ -637,11 +683,11 @@
                     
                     let newGameState = { ...roomDoc.data().gameState };
                     if (newGameState.currentPlayerId !== currentUser.uid) throw new Error("ターンが変わっています。");
-
-                    const newHand = newGameState.hands[currentUser.uid].filter(card => !selectedCards.find(sc => sc.id === card.id));
                     
-                    const playedCardNumber = (selectedCards.find(c => c.suit !== 'JOKER') || selectedCards[0]).number;
-                    const playedCardCount = selectedCards.length;
+                    const newHand = newGameState.hands[currentUser.uid].filter(card => !cardsToPlay.find(sc => sc.id === card.id));
+                    
+                    const playedCardNumber = (cardsToPlay.find(c => c.suit !== 'JOKER') || cardsToPlay[0]).number;
+                    const playedCardCount = cardsToPlay.length;
                     const player = newGameState.players.find(p => p.id === currentUser.uid);
 
                     let playerHasFinished = false;
@@ -674,12 +720,12 @@
                     } else if (playedCardNumber === 8) {
                         newGameState.status = 'awaiting_8giri_confirmation';
                         newGameState.pendingAction = { type: '8-giri', playerId: currentUser.uid };
-                        newGameState.field = { cards: selectedCards, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                        newGameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
                         newGameState.passCount = 0;
                     } else if (playedCardNumber === 5) {
                         newGameState.status = 'awaiting_5skip_confirmation';
                         newGameState.pendingAction = { type: '5-skip', playerId: currentUser.uid, count: playedCardCount };
-                        newGameState.field = { cards: selectedCards, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                        newGameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
                         newGameState.passCount = 0;
                     } else if (playedCardNumber === 7 || playedCardNumber === 10) {
                         newGameState.status = 'awaiting_selection';
@@ -688,14 +734,14 @@
                             playerId: currentUser.uid,
                             count: playedCardCount
                         };
-                        newGameState.field = { cards: selectedCards, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                        newGameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
                         newGameState.passCount = 0;
                         newGameState.log.push(`${player.name}さんが${playedCardNumber}を${playedCardCount}枚出しました。`);
                     } else {
-                        const effectResult = handleSpecialCards(selectedCards, newGameState);
+                        const effectResult = handleSpecialCards(cardsToPlay, newGameState);
                         newGameState = effectResult.newGameState;
                         
-                        newGameState.field = { cards: selectedCards, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                        newGameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
                         newGameState.passCount = 0;
                         if (!effectResult.skipTurn) {
                             newGameState.currentPlayerId = getNextPlayerId(newGameState);
@@ -761,7 +807,7 @@
         }
 
         async function declareDobon() {
-            const { hands, field, players } = localGameState;
+            const { hands, field } = localGameState;
             const myHand = hands[currentUser.uid];
             
             if (myHand.length < 2) return showMessage("ドボンは手札が2枚以上ないと宣言できません。");
@@ -868,6 +914,12 @@
             const playIsSpade3 = playedCards.length === 1 && playedCards[0].suit === 'S' && playedCards[0].number === 3;
             const fieldIsJoker = field.cards.length === 1 && field.cards[0].suit === 'JOKER';
             
+            const getCombinedSuits = (cards) => {
+                const suits = cards.map(c => c.designatedSuit || c.suit)
+                                .filter(s => s !== 'JOKER');
+                return [...new Set(suits)].sort().join('');
+            };
+            
             if (fieldIsJoker && playIsSpade3) return { valid: true, newSuitLock: null };
             
             if (field.cards.length > 0) {
@@ -883,7 +935,7 @@
                 if (playStrength <= fieldStrength) return { valid: false, message: "場よりも強いカードを出してください。" };
                 
                 if (field.suitLock) {
-                    const playSuits = playedCards.map(c => c.suit).filter(s => s !== 'JOKER').sort().join('');
+                    const playSuits = getCombinedSuits(playedCards);
                     if (playSuits && field.suitLock !== playSuits) return { valid: false, message: `縛りが発生しています！スート: [${field.suitLock.split('').join(', ')}]` };
                 }
             }
@@ -893,9 +945,11 @@
 
             let newSuitLock = null;
             if (field.cards.length > 0 && playedCards.length > 1) {
-                const lastSuits = field.cards.map(c => c.suit).filter(s => s !== 'JOKER').sort().join('');
-                const playSuits = playedCards.map(c => c.suit).filter(s => s !== 'JOKER').sort().join('');
-                if (lastSuits === playSuits && playSuits.length > 0) newSuitLock = playSuits;
+                const lastSuits = getCombinedSuits(field.cards);
+                const playSuits = getCombinedSuits(playedCards);
+                if (lastSuits === playSuits && playSuits.length > 0) {
+                    newSuitLock = playSuits;
+                }
             }
 
             return { valid: true, newSuitLock };
@@ -1081,12 +1135,21 @@
         function createCardElement(card) {
             const el = document.createElement('div');
             el.className = 'card';
+            const suitSymbols = { S: '♠', H: '♥', D: '♦', C: '♣' };
             
             if (card.suit === 'JOKER') {
                 el.classList.add('joker');
                 el.innerHTML = `<div class="suit-top">🃏</div><div class="number">JOKER</div><div class="suit-bottom">🃏</div>`;
+                if (card.designatedSuit) {
+                    const suitEl = document.createElement('div');
+                    suitEl.className = 'designated-suit';
+                    if (card.designatedSuit === 'H' || card.designatedSuit === 'D') {
+                        suitEl.classList.add('text-red-500');
+                    }
+                    suitEl.textContent = suitSymbols[card.designatedSuit];
+                    el.appendChild(suitEl);
+                }
             } else {
-                const suitSymbols = { S: '♠', H: '♥', D: '♦', C: '♣' };
                 const suitColors = { S: 'black', H: 'red', D: 'red', C: 'black' };
                 const numberDisplay = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
                 el.classList.add(suitColors[card.suit]);
@@ -1355,6 +1418,30 @@
             await startGame();
         }
 
+        function promptJokerSuit() {
+            const usedSuits = selectedCards
+                .filter(c => c.suit !== 'JOKER')
+                .map(c => c.suit);
+            
+            const suitButtons = document.querySelectorAll('#joker-suit-buttons .suit-button');
+            suitButtons.forEach(button => {
+                const suit = button.dataset.suit;
+                button.disabled = usedSuits.includes(suit);
+            });
+            jokerSuitModal.classList.remove('hidden');
+        }
+
+        function handleJokerSuitSelection(chosenSuit) {
+            jokerSuitModal.classList.add('hidden');
+            const cardsToPlay = selectedCards.map(card => {
+                if (card.suit === 'JOKER') {
+                    return { ...card, designatedSuit: chosenSuit };
+                }
+                return card;
+            });
+            executePlay(cardsToPlay);
+        }
+
         document.getElementById('create-room-btn').addEventListener('click', createRoom);
         document.getElementById('join-room-btn').addEventListener('click', joinRoom);
         document.getElementById('start-game-btn').addEventListener('click', startGame);
@@ -1372,6 +1459,9 @@
             receivedCardsModal.classList.add('hidden');
         });
         document.getElementById('dobon-continue-btn').addEventListener('click', resumeAfterDobon);
+        document.querySelectorAll('#joker-suit-buttons .suit-button').forEach(button => {
+            button.addEventListener('click', () => handleJokerSuitSelection(button.dataset.suit));
+        });
     </script>
 </body>
 </html>
