@@ -53,7 +53,7 @@
         .player-hand {
             display: flex;
             justify-content: center;
-            align-items: flex-end;
+            align-items: center;  /* 【修正】順位表示を中央に配置するために変更 */
             flex-wrap: nowrap;
             overflow-x: auto;
             overflow-y: hidden;
@@ -720,9 +720,9 @@
                     const playedCardNumber = (cardsToPlay.find(c => c.suit !== 'JOKER') || cardsToPlay[0]).number;
                     const playedCardCount = cardsToPlay.length;
                     const player = newGameState.players.find(p => p.id === currentUser.uid);
+
                     let playerHasFinished = false;
                     
-                    // 【修正】7渡しでのあがり判定と手札更新のロジックを修正
                     if (playedCardNumber === 7 && newHand.length > 0 && newHand.length <= playedCardCount) {
                         playerHasFinished = true;
                         const nextPlayerId = getNextPlayerId(newGameState);
@@ -730,19 +730,20 @@
                             newGameState.hands[nextPlayerId].push(...newHand);
                             newGameState.hands[nextPlayerId].sort((a,b)=>getCardStrength(a, newGameState.isRevolution, newGameState.isElevenBack));
                         }
-                        newGameState.hands[currentUser.uid] = []; // 渡すので手札は空になる
+                        newGameState.hands[currentUser.uid] = [];
                         newGameState.log.push(`${player.name}さんが7渡しで手札を全て渡し、あがりました！`);
                     } else if (newHand.length === 0) {
                         playerHasFinished = true;
-                        newGameState.hands[currentUser.uid] = []; // 最後のカードを出したので手札は空
                         newGameState.log.push(`${player.name}さんがあがりました！`);
-                    } else {
-                        newGameState.hands[currentUser.uid] = newHand; // 通常は手札を更新
                     }
 
                     if(playerHasFinished) {
                         newGameState.rankings.push(currentUser.uid);
+                        newGameState.hands[currentUser.uid] = [];
+                    } else {
+                        newGameState.hands[currentUser.uid] = newHand;
                     }
+                    
                     newGameState.players = newGameState.players.map(p => ({...p, cardCount: newGameState.hands[p.id]?.length || 0 }));
                     
                     if (playerHasFinished) {
@@ -1082,38 +1083,48 @@
             const { players, hands, currentPlayerId, field, isRevolution, isElevenBack, rankings, status } = gameState || {};
             
             const myHandContainer = document.getElementById('my-hand');
-            myHandContainer.innerHTML = '';
-            const myHand = (hands && currentUser && hands[currentUser.uid]) ? hands[currentUser.uid] : [];
-            
-            myHand.sort((a,b) => getCardStrength(a, isRevolution, isElevenBack) - getCardStrength(b, isRevolution, isElevenBack));
-            myHand.forEach(card => {
-                const cardEl = createCardElement(card);
-                cardEl.addEventListener('click', () => toggleCardSelection(card, cardEl));
-                if (selectedCards.some(sc => sc.id === card.id)) cardEl.classList.add('selected');
-                myHandContainer.appendChild(cardEl);
-            });
+            const myPlayerIndexInRankings = rankings ? rankings.indexOf(currentUser.uid) : -1;
+
+            if (myPlayerIndexInRankings !== -1) {
+                myHandContainer.innerHTML = `<div class="text-center text-3xl font-bold py-12 text-yellow-300">あなたは ${myPlayerIndexInRankings + 1}位 です！</div>`;
+            } else {
+                myHandContainer.innerHTML = '';
+                const myHand = (hands && currentUser && hands[currentUser.uid]) ? hands[currentUser.uid] : [];
+                
+                myHand.sort((a,b) => getCardStrength(a, isRevolution, isElevenBack) - getCardStrength(b, isRevolution, isElevenBack));
+                myHand.forEach(card => {
+                    const cardEl = createCardElement(card);
+                    cardEl.addEventListener('click', () => toggleCardSelection(card, cardEl));
+                    if (selectedCards.some(sc => sc.id === card.id)) cardEl.classList.add('selected');
+                    myHandContainer.appendChild(cardEl);
+                });
+            }
             
             const otherPlayersContainer = document.getElementById('other-players-container');
             otherPlayersContainer.innerHTML = '';
             if(!players) return;
             const myPlayerIndex = players.findIndex(p => currentUser && p.id === currentUser.uid);
-            if (myPlayerIndex === -1) return;
+            if (myPlayerIndex === -1) {
+                 //自分が抜けて観戦状態になった場合も考慮
+                const otherPlayers = players;
+                 otherPlayers.forEach(player => { /* 描画処理 */ });
+            } else {
+                const orderedPlayers = [...players.slice(myPlayerIndex + 1), ...players.slice(0, myPlayerIndex)];
+                orderedPlayers.forEach(player => {
+                    const playerInfoEl = document.createElement('div');
+                    playerInfoEl.className = 'player-info bg-black/30 p-2 rounded-lg text-center w-32';
+                    
+                    if (player.id === currentPlayerId && status === 'playing') {
+                        playerInfoEl.classList.add('current-turn');
+                    }
+                    
+                    const rank = rankings.indexOf(player.id);
+                    const rankText = rank !== -1 ? `<span class="text-yellow-400 font-bold">${getRankName(rank, players.length + rankings.length)}</span>` : '';
+                    playerInfoEl.innerHTML = `<p class="font-bold truncate">${player.name}</p><p>残り: ${player.cardCount}枚</p><p>${rankText}</p>`;
+                    otherPlayersContainer.appendChild(playerInfoEl);
+                });
+            }
 
-            const orderedPlayers = [...players.slice(myPlayerIndex + 1), ...players.slice(0, myPlayerIndex)];
-            
-            orderedPlayers.forEach(player => {
-                const playerInfoEl = document.createElement('div');
-                playerInfoEl.className = 'player-info bg-black/30 p-2 rounded-lg text-center w-32';
-                
-                if (player.id === currentPlayerId && status === 'playing') {
-                    playerInfoEl.classList.add('current-turn');
-                }
-                
-                const rank = rankings.indexOf(player.id);
-                const rankText = rank !== -1 ? `<span class="text-yellow-400 font-bold">${getRankName(rank, players.length + rankings.length)}</span>` : '';
-                playerInfoEl.innerHTML = `<p class="font-bold truncate">${player.name}</p><p>残り: ${player.cardCount}枚</p><p>${rankText}</p>`;
-                otherPlayersContainer.appendChild(playerInfoEl);
-            });
 
             const fieldContainer = document.getElementById('field');
             fieldContainer.innerHTML = '';
@@ -1134,7 +1145,8 @@
             document.getElementById('play-card-btn').disabled = !isMyTurn || actionLocked;
             document.getElementById('pass-btn').disabled = !isMyTurn || actionLocked || !field?.cards || field.cards.length === 0;
             
-            let canDobon = !actionLocked && myHand.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid;
+            const myHandForDobon = (hands && currentUser && hands[currentUser.uid]) ? hands[currentUser.uid] : [];
+            let canDobon = !actionLocked && myHandForDobon.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid;
             if (status && status.includes('confirmation') && localGameState.pendingAction?.playerId === currentUser.uid) {
                 canDobon = false;
             }
