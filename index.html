@@ -999,7 +999,7 @@
                 }
                 
                 const roomData = doc.data();
-                localGameState = roomData.gameState;
+                localGameState = roomData.gameState || {};
                 leaveGameBtn.classList.remove('hidden');
                 
                 processLastEvent(localGameState);
@@ -1078,7 +1078,7 @@
         }
 
         function updateGameUI(gameState) {
-            const { players, hands, currentPlayerId, field, isRevolution, isElevenBack, rankings, status } = gameState;
+            const { players, hands, currentPlayerId, field, isRevolution, isElevenBack, rankings, status } = gameState || {};
             
             const myHandContainer = document.getElementById('my-hand');
             myHandContainer.innerHTML = '';
@@ -1127,17 +1127,17 @@
             
             gameInfoEl.innerHTML = infoText;
 
-            const actionLocked = status.startsWith('awaiting_');
+            const actionLocked = status && status.startsWith('awaiting_');
             const isMyTurn = currentPlayerId === currentUser.uid && status === 'playing';
 
             document.getElementById('play-card-btn').disabled = !isMyTurn || actionLocked;
             document.getElementById('pass-btn').disabled = !isMyTurn || actionLocked || !field?.cards || field.cards.length === 0;
             
             let canDobon = !actionLocked && myHand.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid;
-            if (status.includes('confirmation') && localGameState.pendingAction?.playerId === currentUser.uid) {
+            if (status && status.includes('confirmation') && localGameState.pendingAction?.playerId === currentUser.uid) {
                 canDobon = false;
             }
-            if (status === 'playing' || status.includes('confirmation')) {
+            if (status === 'playing' || (status && status.includes('confirmation'))) {
                  document.getElementById('dobon-btn').disabled = !canDobon;
             } else {
                  document.getElementById('dobon-btn').disabled = true;
@@ -1154,10 +1154,10 @@
             const rankingsList = document.getElementById('rankings-list');
             rankingsList.innerHTML = '';
             
-            const totalPlayersInGame = localGameState.players.length + localGameState.rankings.length;
+            const totalPlayersInGame = (localGameState.players?.length || 0) + (localGameState.rankings?.length || 0);
 
             gameState.rankings.forEach((playerId, index) => {
-                const player = localGameState.players.find(p => p.id === playerId) || gameState.players.find(p => p.id === playerId);
+                const player = (localGameState.players || []).find(p => p.id === playerId) || (gameState.players || []).find(p => p.id === playerId);
                 if(!player) return;
                 const li = document.createElement('div');
                 li.className = "flex justify-between items-center p-2 bg-white/10 rounded";
@@ -1363,19 +1363,20 @@
                     }
 
                     const cardCount = gameState.pendingAction.count;
+                    const skips = (2 * cardCount) - 1;
                     const activePlayersCount = gameState.players.filter(p => !gameState.rankings.includes(p.id)).length;
                     
-                    if (cardCount >= activePlayersCount - 1) {
+                    if (skips >= activePlayersCount - 1) {
                         gameState.field = { cards: [], lastPlayerId: null, suitLock: null };
                         gameState.currentPlayerId = currentUser.uid;
                         gameState.log.push(`5で他の全員がスキップされ、場が流れました。`);
                     } else {
-                        let tempCurrentPlayerId = currentUser.uid;
-                        for (let i = 0; i < cardCount; i++) {
-                            tempCurrentPlayerId = getNextPlayerId({ ...gameState, currentPlayerId: tempCurrentPlayerId });
+                        let lastSkippedPlayerId = currentUser.uid;
+                        for (let i = 0; i < skips; i++) {
+                            lastSkippedPlayerId = getNextPlayerId({ ...gameState, currentPlayerId: lastSkippedPlayerId });
                         }
-                        gameState.currentPlayerId = tempCurrentPlayerId;
-                        gameState.log.push(`5で${cardCount}人スキップ！`);
+                        gameState.currentPlayerId = getNextPlayerId({ ...gameState, currentPlayerId: lastSkippedPlayerId });
+                        gameState.log.push(`5を${cardCount}枚出し、${skips}人スキップ！`);
                     }
 
                     gameState.status = 'playing';
