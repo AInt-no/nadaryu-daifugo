@@ -178,60 +178,43 @@
         <div id="home-screen" class="text-center py-12">
             <h1 class="text-5xl font-bold mb-4 text-yellow-300">オンライン大富豪</h1>
             <p class="mb-8 text-lg">ルームを作成するか、IDを入力して参加してください。</p>
-            
             <div class="max-w-md mx-auto bg-white/10 p-8 rounded-lg shadow-lg backdrop-blur-sm">
                 <div class="mb-6">
                     <label for="player-name" class="block mb-2 text-sm font-bold">プレイヤー名</label>
                     <input type="text" id="player-name" class="w-full px-4 py-2 rounded-md text-gray-800" placeholder="名前を入力">
                 </div>
-                
-                <button id="create-room-btn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-800 font-bold py-3 px-4 rounded-lg text-lg transition duration-300 mb-4">
-                    ルームを作成する
-                </button>
-                
+                <button id="create-room-btn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-800 font-bold py-3 px-4 rounded-lg text-lg transition duration-300 mb-4">ルームを作成する</button>
                 <div class="flex items-center">
                     <input type="text" id="room-id-input" class="w-full px-4 py-2 rounded-l-md text-gray-800" placeholder="ルームIDを入力">
                     <button id="join-room-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-r-lg transition duration-300">参加</button>
                 </div>
             </div>
         </div>
-
         <div id="lobby-screen" class="hidden">
             <h2 class="text-3xl font-bold text-center mb-4">待機ルーム</h2>
             <div class="text-center mb-6">
                 <p class="text-lg">ルームID: <span id="room-id-display" class="font-bold text-2xl text-yellow-300 bg-black/20 px-3 py-1 rounded-md cursor-pointer" onclick="copyRoomId()"></span></p>
                 <p class="text-sm text-gray-300">（クリックしてIDをコピー）</p>
             </div>
-            
             <div class="bg-white/10 p-6 rounded-lg shadow-lg">
                 <h3 class="text-xl font-bold mb-4">参加プレイヤー</h3>
-                <ul id="player-list" class="space-y-2">
-                    </ul>
+                <ul id="player-list" class="space-y-2"></ul>
             </div>
-            
             <div class="text-center mt-8">
-                <button id="start-game-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-8 rounded-lg text-xl transition duration-300 shadow-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
-                    ゲーム開始 (2人以上で可能)
-                </button>
+                <button id="start-game-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-8 rounded-lg text-xl transition duration-300 shadow-lg disabled:bg-gray-500 disabled:cursor-not-allowed">ゲーム開始 (2人以上で可能)</button>
             </div>
         </div>
-
         <div id="game-screen" class="hidden">
-            <div id="other-players-container" class="flex justify-around mb-4">
-            </div>
-
+            <div id="other-players-container" class="flex justify-around mb-4"></div>
             <div class="bg-green-900/50 min-h-[220px] rounded-lg p-4 mb-4 border-2 border-yellow-400/50">
                 <div class="text-center mb-2">
                     <p class="text-sm">場に出ているカード</p>
                     <div id="game-info" class="text-sm text-yellow-300 h-5"></div>
                 </div>
-                <div id="field" class="field-cards">
-                </div>
+                <div id="field" class="field-cards"></div>
             </div>
-
             <div class="fixed bottom-0 left-0 right-0 bg-black/30 backdrop-blur-sm p-4">
-                <div id="my-hand" class="player-hand mb-4">
-                </div>
+                <div id="my-hand" class="player-hand mb-4"></div>
                 <div id="action-buttons" class="flex justify-center items-center gap-4">
                     <button id="play-card-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition duration-300 disabled:bg-gray-500">出す</button>
                     <button id="pass-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition duration-300 disabled:bg-gray-500">パス</button>
@@ -239,34 +222,25 @@
                 </div>
             </div>
         </div>
-        
         <div id="game-over-modal" class="hidden modal-overlay">
             <div class="modal-content bg-gray-800 text-white w-full max-w-md">
                 <h2 id="game-over-title" class="text-3xl font-bold mb-4 text-yellow-300">ゲーム終了！</h2>
-                <div id="rankings-list" class="text-left space-y-2 mb-6">
-                </div>
+                <div id="rankings-list" class="text-left space-y-2 mb-6"></div>
                 <button id="next-game-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">次のゲームへ</button>
                 <button id="leave-room-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded ml-2">退出</button>
             </div>
         </div>
-
         <div id="message-modal" class="hidden modal-overlay">
-            <div id="message-content" class="modal-content bg-gray-800 text-white">
-            </div>
+            <div id="message-content" class="modal-content bg-gray-800 text-white"></div>
         </div>
-
         <div id="selection-modal" class="hidden modal-overlay">
             <div class="modal-content bg-gray-800 text-white w-full max-w-2xl">
                 <h2 id="selection-title" class="text-2xl font-bold mb-2"></h2>
                 <p id="selection-description" class="mb-4"></p>
-                <div id="selection-hand" class="selection-hand">
-                </div>
-                <button id="confirm-selection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
-                    決定
-                </button>
+                <div id="selection-hand" class="selection-hand"></div>
+                <button id="confirm-selection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed">決定</button>
             </div>
         </div>
-
         <div id="8giri-modal" class="hidden modal-overlay">
             <div class="modal-content bg-gray-800 text-white w-full max-w-md">
                 <h2 class="text-2xl font-bold mb-2">8切り</h2>
@@ -275,6 +249,13 @@
             </div>
         </div>
 
+        <div id="5skip-modal" class="hidden modal-overlay">
+            <div class="modal-content bg-gray-800 text-white w-full max-w-md">
+                <h2 class="text-2xl font-bold mb-2">5スキップ</h2>
+                <p class="mb-6">他のプレイヤーのドボン宣言を待っています...</p>
+                <button id="confirm-5skip-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">OK (スキップ実行)</button>
+            </div>
+        </div>
     </div>
 
     <script type="module">
@@ -314,6 +295,7 @@
         const gameOverModal = document.getElementById('game-over-modal');
         const selectionModal = document.getElementById('selection-modal');
         const eightGiriModal = document.getElementById('8giri-modal');
+        const fiveSkipModal = document.getElementById('5skip-modal');
         const leaveGameBtn = document.getElementById('leave-game-btn');
 
         onAuthStateChanged(auth, async (user) => {
@@ -501,6 +483,7 @@
                             const winner = activePlayers[0];
                             gameState.rankings.push(winner.id);
                         }
+
                     }
                     
                     if (roomData.hostId === userId) {
@@ -647,6 +630,11 @@
                         newGameState.pendingAction = { type: '8-giri', playerId: currentUser.uid };
                         newGameState.field = { cards: selectedCards, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
                         newGameState.passCount = 0;
+                    } else if (playedCardNumber === 5) {
+                        newGameState.status = 'awaiting_5skip_confirmation';
+                        newGameState.pendingAction = { type: '5-skip', playerId: currentUser.uid };
+                        newGameState.field = { cards: selectedCards, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                        newGameState.passCount = 0;
                     } else if (playedCardNumber === 7 || playedCardNumber === 10) {
                         newGameState.status = 'awaiting_selection';
                         newGameState.pendingAction = {
@@ -787,9 +775,6 @@
             const cardNum = uniqueNumbers[0] || (playedCards.find(c => c.suit === 'JOKER') ? playedCards[0].number : null);
             const cardCount = playedCards.length;
             
-            let fieldCleared = false;
-            let skipTurn = false;
-            
             const isFourCardRevolution = (cardCount === 4 && uniqueNumbers.length <= 1);
             const isThreeThreesRevolution = (cardCount === 3 && nonJokers.length === 3 && cardNum === 3);
 
@@ -803,22 +788,7 @@
                 gameState.log.push(`${player.name}さんがイレブンバック！`);
             }
             
-            if(cardNum === 5) {
-                const activePlayersCount = gameState.players.filter(p => !gameState.rankings.includes(p.id)).length;
-                if (cardCount >= activePlayersCount - 1) {
-                    fieldCleared = true;
-                    gameState.log.push(`${player.name}さんの5で他の全員がスキップされ、場が流れました。`);
-                } else {
-                    let tempCurrentPlayerId = gameState.currentPlayerId;
-                    for (let i = 0; i < cardCount; i++) {
-                        tempCurrentPlayerId = getNextPlayerId({ ...gameState, currentPlayerId: tempCurrentPlayerId });
-                    }
-                    gameState.currentPlayerId = tempCurrentPlayerId;
-                    skipTurn = true;
-                    gameState.log.push(`${player.name}さんが5を出し、${cardCount}人スキップ！`);
-                }
-            }
-            return { newGameState: gameState, fieldCleared, skipTurn };
+            return { newGameState: gameState, fieldCleared: false, skipTurn: false };
         }
 
         function getCardStrength(card, isRevolution = false, isElevenBack = false) {
@@ -916,6 +886,7 @@
                     
                     case 'playing':
                         eightGiriModal.classList.add('hidden');
+                        fiveSkipModal.classList.add('hidden');
                         if(selectionModal.classList.contains('hidden')) {
                              showScreen(gameScreen);
                              updateGameUI(localGameState);
@@ -935,6 +906,14 @@
                         updateGameUI(localGameState);
                          if (localGameState.pendingAction?.playerId === currentUser.uid) {
                             eightGiriModal.classList.remove('hidden');
+                        }
+                        break;
+                    
+                    case 'awaiting_5skip_confirmation':
+                        showScreen(gameScreen);
+                        updateGameUI(localGameState);
+                         if (localGameState.pendingAction?.playerId === currentUser.uid) {
+                            fiveSkipModal.classList.remove('hidden');
                         }
                         break;
                         
@@ -1017,8 +996,9 @@
             
             gameInfoEl.innerHTML = infoText;
 
+            const actionLocked = status.startsWith('awaiting_');
             const isMyTurn = currentPlayerId === currentUser.uid && status === 'playing';
-            const actionLocked = status === 'awaiting_selection' || status === 'awaiting_8giri_confirmation';
+
             document.getElementById('play-card-btn').disabled = !isMyTurn || actionLocked;
             document.getElementById('pass-btn').disabled = !isMyTurn || actionLocked || !field?.cards || field.cards.length === 0;
             
@@ -1186,14 +1166,50 @@
             }
         }
 
+        async function resolve5skip() {
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const roomDoc = await transaction.get(roomRef);
+                    if (!roomDoc.exists()) throw new Error("ルームが見つかりません。");
+                    let gameState = roomDoc.data().gameState;
+
+                    if (gameState.status !== 'awaiting_5skip_confirmation' || gameState.pendingAction?.playerId !== currentUser.uid) {
+                        return;
+                    }
+
+                    const cardCount = gameState.field.cards.length;
+                    const activePlayersCount = gameState.players.filter(p => !gameState.rankings.includes(p.id)).length;
+                    
+                    if (cardCount >= activePlayersCount - 1) {
+                        gameState.field = { cards: [], lastPlayerId: null, suitLock: null };
+                        gameState.currentPlayerId = currentUser.uid;
+                        gameState.log.push(`5で他の全員がスキップされ、場が流れました。`);
+                    } else {
+                        let tempCurrentPlayerId = currentUser.uid;
+                        for (let i = 0; i < cardCount; i++) {
+                            tempCurrentPlayerId = getNextPlayerId({ ...gameState, currentPlayerId: tempCurrentPlayerId });
+                        }
+                        gameState.currentPlayerId = tempCurrentPlayerId;
+                        gameState.log.push(`5で${cardCount}人スキップ！`);
+                    }
+
+                    gameState.status = 'playing';
+                    delete gameState.pendingAction;
+                    transaction.update(roomRef, { gameState });
+                });
+                fiveSkipModal.classList.add('hidden');
+            } catch (error) {
+                 console.error("5スキップ解決エラー:", error);
+                 showMessage(error.message);
+            }
+        }
+
         async function prepareNextGame() {
             gameOverModal.classList.add('hidden');
             await startGame();
         }
 
-        // =========================================================================
-        // イベントリスナー
-        // =========================================================================
         document.getElementById('create-room-btn').addEventListener('click', createRoom);
         document.getElementById('join-room-btn').addEventListener('click', joinRoom);
         document.getElementById('start-game-btn').addEventListener('click', startGame);
@@ -1206,6 +1222,7 @@
         
         document.getElementById('confirm-selection-btn').addEventListener('click', confirmSelection);
         document.getElementById('confirm-8giri-btn').addEventListener('click', resolve8giri);
+        document.getElementById('confirm-5skip-btn').addEventListener('click', resolve5skip);
     </script>
 </body>
 </html>
