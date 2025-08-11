@@ -147,12 +147,11 @@
             transform: rotate(90deg);
         }
 
-        /* ===== 【新規追加】退出ボタン用のスタイル ===== */
         #leave-game-btn {
             position: fixed;
             top: 15px;
             left: 15px;
-            background-color: rgba(239, 68, 68, 0.8); /* red-500 with opacity */
+            background-color: rgba(239, 68, 68, 0.8);
             color: white;
             border: 1px solid rgba(255, 255, 255, 0.4);
             border-radius: 8px;
@@ -165,7 +164,7 @@
             transition: all 0.2s ease;
         }
         #leave-game-btn:hover {
-            background-color: rgba(220, 38, 38, 0.9); /* red-600 with opacity */
+            background-color: rgba(220, 38, 38, 0.9);
         }
     </style>
 </head>
@@ -361,7 +360,7 @@
         }
 
         // =========================================================================
-        // ルーム管理 (退出処理を大幅修正)
+        // ルーム管理
         // =========================================================================
         async function createRoom() {
             if (!currentUser) return showMessage("認証情報が取得できません。");
@@ -423,7 +422,7 @@
             try {
                 const roomDoc = await getDoc(roomRef);
                 if (!roomDoc.exists() || !roomDoc.data().players.some(p => p.id === currentUser.uid)) {
-                    cleanupClientState(); // 参加者でないならクライアント情報をクリア
+                    cleanupClientState();
                     return;
                 }
                 currentRoomId = roomId;
@@ -434,7 +433,6 @@
             }
         }
         
-        // 【新規】クライアント側の状態をリセットする関数
         function cleanupClientState() {
             sessionStorage.removeItem('daifugoRoomId');
             if (unsubscribeRoom) unsubscribeRoom();
@@ -445,14 +443,23 @@
             leaveGameBtn.classList.add('hidden');
         }
 
-        // 【新規】メインの退出処理関数
+        // 【新規】退出確認用の関数
+        function confirmAndLeave() {
+            if (confirm("本当にルームから退出しますか？\nゲームの途中でも退出となり、手札は他のプレイヤーに配られます。")) {
+                handleLeaveGame();
+            }
+        }
+
         async function handleLeaveGame() {
             if (!currentRoomId || !currentUser) return cleanupClientState();
 
             const roomId = currentRoomId;
             const userId = currentUser.uid;
-            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, roomId);
             
+            // 先にクライアント側の状態をリセットして画面遷移
+            cleanupClientState();
+
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, roomId);
             try {
                 await runTransaction(db, async (transaction) => {
                     const roomDoc = await transaction.get(roomRef);
@@ -462,57 +469,53 @@
                     let gameState = roomData.gameState;
                     
                     const leavingPlayer = roomData.players.find(p => p.id === userId);
-                    if (!leavingPlayer) return; // 既に参加者でない
+                    if (!leavingPlayer) return;
 
-                    // プレイヤーを削除
                     const remainingPlayers = roomData.players.filter(p => p.id !== userId);
 
-                    // 誰もいなくなったらルームを削除
                     if (remainingPlayers.length === 0) {
                         transaction.delete(roomRef);
                         return;
                     }
+                    
+                    // 待機中かゲーム中かで処理を分岐
+                    if (gameState.status !== 'waiting') {
+                        const leavingPlayerHand = shuffle(gameState.hands?.[userId] || []);
+                        if(gameState.hands) delete gameState.hands[userId];
 
-                    // ゲーム中の場合、カードを再配分
-                    if (gameState.status !== 'waiting' && gameState.hands && gameState.hands[userId]) {
-                        const leavingPlayerHand = shuffle(gameState.hands[userId] || []);
-                        delete gameState.hands[userId];
-
-                        // カードを再配分
-                        leavingPlayerHand.forEach((card, index) => {
-                            const recipientPlayer = remainingPlayers[index % remainingPlayers.length];
-                            gameState.hands[recipientPlayer.id].push(card);
-                        });
-
-                        // 各プレイヤーの手札をソートし、カード枚数を更新
+                        if (leavingPlayerHand.length > 0) {
+                            leavingPlayerHand.forEach((card, index) => {
+                                const recipientPlayer = remainingPlayers[index % remainingPlayers.length];
+                                if (gameState.hands[recipientPlayer.id]) {
+                                     gameState.hands[recipientPlayer.id].push(card);
+                                }
+                            });
+                        }
+                        
                         remainingPlayers.forEach(p => {
-                            gameState.hands[p.id].sort((a,b) => getCardStrength(a, gameState.isRevolution, gameState.isElevenBack));
-                            p.cardCount = gameState.hands[p.id].length;
+                           if(gameState.hands[p.id]) {
+                               gameState.hands[p.id].sort((a,b) => getCardStrength(a, gameState.isRevolution, gameState.isElevenBack));
+                               p.cardCount = gameState.hands[p.id].length;
+                           }
                         });
                         
-                        gameState.players = remainingPlayers;
                         gameState.playOrder = gameState.playOrder.filter(id => id !== userId);
-                    } else {
-                         gameState.players = remainingPlayers;
+                        if (gameState.currentPlayerId === userId) {
+                            gameState.currentPlayerId = getNextPlayerId(gameState);
+                        }
+
+                        // 残り1人になったらその人が勝利
+                        const activePlayers = remainingPlayers.filter(p => !gameState.rankings.includes(p.id));
+                        if (activePlayers.length === 1) {
+                            gameState.status = 'finished';
+                            const winner = activePlayers[0];
+                            gameState.rankings.push(winner.id);
+                        }
+
                     }
+                    
+                    gameState.players = remainingPlayers;
 
-
-                    // 残り1人になったらその人が勝利
-                    if (remainingPlayers.length === 1 && gameState.status !== 'waiting') {
-                        gameState.status = 'finished';
-                        const winner = remainingPlayers[0];
-                        // ランキングを再設定
-                        const finishedPlayers = gameState.rankings || [];
-                        const otherPlayers = gameState.players.filter(p => p.id !== winner.id && !finishedPlayers.includes(p.id));
-                        gameState.rankings = [...finishedPlayers, winner.id, ...otherPlayers.map(p => p.id)];
-                    }
-
-                    // ターンを調整
-                    if (gameState.currentPlayerId === userId) {
-                        gameState.currentPlayerId = getNextPlayerId(gameState);
-                    }
-
-                    // ホストを交代
                     if (roomData.hostId === userId) {
                         roomData.hostId = remainingPlayers[0].id;
                     }
@@ -525,9 +528,6 @@
                 });
             } catch (error) {
                 console.error("ゲーム退出処理エラー:", error);
-                showMessage("退出処理中にエラーが発生しました。");
-            } finally {
-                cleanupClientState(); // サーバー処理の結果に関わらずクライアントは退出
             }
         }
 
@@ -863,13 +863,13 @@
             unsubscribeRoom = onSnapshot(roomRef, (doc) => {
                 if (!doc.exists()) {
                     showMessage("ルームが削除されました。ホームに戻ります。");
-                    cleanupClientState(); // 修正
+                    cleanupClientState();
                     return;
                 }
                 
                 const roomData = doc.data();
                 localGameState = roomData.gameState;
-                leaveGameBtn.classList.remove('hidden'); // 退出ボタンを表示
+                leaveGameBtn.classList.remove('hidden');
                 
                 switch (localGameState.status) {
                     case 'waiting':
@@ -973,7 +973,7 @@
             const isMyTurn = currentPlayerId === currentUser.uid && gameState.status === 'playing';
             document.getElementById('play-card-btn').disabled = !isMyTurn;
             document.getElementById('pass-btn').disabled = !isMyTurn || !field?.cards || field.cards.length === 0;
-            document.getElementById('dobon-btn').disabled = true; // ドボンは無効
+            document.getElementById('dobon-btn').disabled = true;
         }
         
         function showGameOverUI(gameState) {
@@ -984,7 +984,7 @@
             
             gameState.rankings.forEach((playerId, index) => {
                 const player = gameState.players.find(p => p.id === playerId);
-                if(!player) return; // 退出したプレイヤーはスキップ
+                if(!player) return;
                 const li = document.createElement('div');
                 li.className = "flex justify-between items-center p-2 bg-white/10 rounded";
                 const rankName = rankNames[index] || `${index + 1}位`;
@@ -1123,9 +1123,11 @@
         document.getElementById('pass-btn').addEventListener('click', passTurn);
         document.getElementById('dobon-btn').addEventListener('click', () => showMessage("ドボン機能は現在調整中です。"));
         document.getElementById('next-game-btn').addEventListener('click', prepareNextGame);
-        document.getElementById('leave-room-btn').addEventListener('click', handleLeaveGame);
+        // 【修正】両方の退出ボタンが確認関数を呼び出すように変更
+        document.getElementById('leave-room-btn').addEventListener('click', confirmAndLeave);
+        leaveGameBtn.addEventListener('click', confirmAndLeave);
+        
         document.getElementById('confirm-selection-btn').addEventListener('click', confirmSelection);
-        leaveGameBtn.addEventListener('click', handleLeaveGame);
     </script>
 </body>
 </html>
