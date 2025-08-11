@@ -400,11 +400,43 @@
             setTimeout(() => modal.classList.add('hidden'), duration);
         }
 
+        // 【修正】iPhoneでのコピーに対応
         function copyRoomId() {
             const roomId = document.getElementById('room-id-display').textContent;
-            navigator.clipboard.writeText(roomId).then(() => {
-                showMessage('ルームIDをコピーしました！');
-            });
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(roomId).then(() => {
+                    showMessage('ルームIDをコピーしました！');
+                }).catch(err => {
+                    console.error('クリップボードAPIでのコピーに失敗:', err);
+                    fallbackCopyTextToClipboard(roomId);
+                });
+            } else {
+                fallbackCopyTextToClipboard(roomId);
+            }
+        }
+
+        function fallbackCopyTextToClipboard(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.top = '-9999px';
+            textArea.style.left = '-9999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showMessage('ルームIDをコピーしました！');
+                } else {
+                    showMessage('コピーに失敗しました。');
+                }
+            } catch (err) {
+                console.error('execCommandでのコピーに失敗:', err);
+                showMessage('コピーに失敗しました。');
+            }
+            document.body.removeChild(textArea);
         }
 
         async function createRoom() {
