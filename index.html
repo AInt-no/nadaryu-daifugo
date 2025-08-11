@@ -1102,7 +1102,7 @@
             
             orderedPlayers.forEach(player => {
                 const playerInfoEl = document.createElement('div');
-                playerInfoEl.className = 'player-info bg-black/30 p-2 rounded-lg text-center';
+                playerInfoEl.className = 'player-info bg-black/30 p-2 rounded-lg text-center w-32';
                 
                 if (player.id === currentPlayerId && status === 'playing') {
                     playerInfoEl.classList.add('current-turn');
@@ -1149,18 +1149,19 @@
         }
 
         function showGameOverUI(gameState) {
+            if (!gameState || !gameState.rankings || !gameState.players) return;
             gameOverModal.classList.remove('hidden');
             const rankingsList = document.getElementById('rankings-list');
             rankingsList.innerHTML = '';
             
-            const totalPlayers = gameState.players.length + gameState.rankings.length;
+            const totalPlayersInGame = localGameState.players.length + localGameState.rankings.length;
 
             gameState.rankings.forEach((playerId, index) => {
                 const player = localGameState.players.find(p => p.id === playerId) || gameState.players.find(p => p.id === playerId);
                 if(!player) return;
                 const li = document.createElement('div');
                 li.className = "flex justify-between items-center p-2 bg-white/10 rounded";
-                const rankName = getRankName(index, totalPlayers);
+                const rankName = getRankName(index, totalPlayersInGame);
                 li.innerHTML = `<span class="font-bold text-yellow-400">${rankName}</span><span>${player.name}</span>`;
                 rankingsList.appendChild(li);
             });
@@ -1207,7 +1208,7 @@
         }
 
         function processLastEvent(gameState) {
-            if (!gameState.lastEvent || gameState.lastEvent.timestamp === acknowledgedEventTimestamp) {
+            if (!gameState || !gameState.lastEvent || gameState.lastEvent.timestamp === acknowledgedEventTimestamp) {
                 return;
             }
             acknowledgedEventTimestamp = gameState.lastEvent.timestamp;
@@ -1389,7 +1390,7 @@
         }
 
         function showDobonSuccessModal(gameState) {
-            const { dobonInfo } = gameState;
+            const { dobonInfo } = gameState || {};
             if (!dobonInfo) return;
 
             document.getElementById('dobon-player-info').textContent = `${dobonInfo.playerName}の手札 (合計: ${dobonInfo.sum})`;
