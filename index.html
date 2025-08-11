@@ -122,7 +122,6 @@
              border: 2px solid #3b82f6;
         }
 
-        /* ===== 【新規追加】リロードボタン用のスタイル ===== */
         #reload-btn {
             position: fixed;
             top: 15px;
@@ -136,7 +135,7 @@
             font-size: 1.6rem;
             line-height: 1;
             cursor: pointer;
-            z-index: 1100; /* モーダル(1000)より手前に表示 */
+            z-index: 1100;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -147,6 +146,27 @@
             background-color: rgba(255, 255, 255, 0.4);
             transform: rotate(90deg);
         }
+
+        /* ===== 【新規追加】退出ボタン用のスタイル ===== */
+        #leave-game-btn {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            background-color: rgba(239, 68, 68, 0.8); /* red-500 with opacity */
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1100;
+            padding: 10px 16px;
+            backdrop-filter: blur(5px);
+            transition: all 0.2s ease;
+        }
+        #leave-game-btn:hover {
+            background-color: rgba(220, 38, 38, 0.9); /* red-600 with opacity */
+        }
     </style>
 </head>
 <body class="bg-green-800 text-white">
@@ -154,6 +174,7 @@
     <div id="app" class="container mx-auto p-4 max-w-7xl">
 
         <button id="reload-btn" onclick="location.reload()" title="ページを更新">🔄</button>
+        <button id="leave-game-btn" class="hidden">ルームから退出</button>
 
         <div id="home-screen" class="text-center py-12">
             <h1 class="text-5xl font-bold mb-4 text-yellow-300">オンライン大富豪</h1>
@@ -291,6 +312,7 @@
         const gameScreen = document.getElementById('game-screen');
         const gameOverModal = document.getElementById('game-over-modal');
         const selectionModal = document.getElementById('selection-modal');
+        const leaveGameBtn = document.getElementById('leave-game-btn');
 
         // =========================================================================
         // 認証処理
@@ -313,18 +335,16 @@
         });
 
         // =========================================================================
-        // 画面遷移
+        // 画面遷移・UIヘルパー
         // =========================================================================
         function showScreen(screen) {
             homeScreen.classList.add('hidden');
             lobbyScreen.classList.add('hidden');
             gameScreen.classList.add('hidden');
+            gameOverModal.classList.add('hidden');
             screen.classList.remove('hidden');
         }
 
-        // =========================================================================
-        // UIヘルパー関数
-        // =========================================================================
         function showMessage(message, duration = 3000) {
             const modal = document.getElementById('message-modal');
             const content = document.getElementById('message-content');
@@ -337,19 +357,14 @@
             const roomId = document.getElementById('room-id-display').textContent;
             navigator.clipboard.writeText(roomId).then(() => {
                 showMessage('ルームIDをコピーしました！');
-            }, (err) => {
-                showMessage('コピーに失敗しました。');
             });
         }
 
         // =========================================================================
-        // ルーム管理
+        // ルーム管理 (退出処理を大幅修正)
         // =========================================================================
         async function createRoom() {
-            if (!currentUser) {
-                showMessage("認証情報が取得できません。");
-                return;
-            }
+            if (!currentUser) return showMessage("認証情報が取得できません。");
             const playerName = document.getElementById('player-name').value.trim() || `プレイヤー${Math.floor(Math.random() * 1000)}`;
             const roomId = Math.random().toString(36).substring(2, 7).toUpperCase();
             
@@ -374,24 +389,16 @@
         }
 
         async function joinRoom() {
-            if (!currentUser) {
-                showMessage("認証情報が取得できません。");
-                return;
-            }
+            if (!currentUser) return showMessage("認証情報が取得できません。");
             const roomId = document.getElementById('room-id-input').value.trim().toUpperCase();
-            if (!roomId) {
-                showMessage("ルームIDを入力してください。");
-                return;
-            }
+            if (!roomId) return showMessage("ルームIDを入力してください。");
             const playerName = document.getElementById('player-name').value.trim() || `プレイヤー${Math.floor(Math.random() * 1000)}`;
             
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, roomId);
-
             try {
                 await runTransaction(db, async (transaction) => {
                     const roomDoc = await transaction.get(roomRef);
                     if (!roomDoc.exists()) throw new Error("ルームが見つかりません。");
-                    
                     const roomData = roomDoc.data();
                     if (roomData.gameState.status !== 'waiting') throw new Error("ゲームは既に開始されています。");
 
@@ -412,57 +419,115 @@
         }
 
         async function rejoinRoom(roomId) {
-            console.log(`ルーム ${roomId} に再接続します。`);
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, roomId);
             try {
                 const roomDoc = await getDoc(roomRef);
                 if (!roomDoc.exists() || !roomDoc.data().players.some(p => p.id === currentUser.uid)) {
-                    console.log("ルームが存在しないか、あなたはプレイヤーではありません。ホームに戻ります。");
-                    sessionStorage.removeItem('daifugoRoomId');
-                    showScreen(homeScreen);
+                    cleanupClientState(); // 参加者でないならクライアント情報をクリア
                     return;
                 }
                 currentRoomId = roomId;
                 listenToRoomChanges(roomId);
             } catch (error) {
                 console.error("再接続エラー:", error);
-                sessionStorage.removeItem('daifugoRoomId');
-                showScreen(homeScreen);
+                cleanupClientState();
             }
         }
         
-        async function leaveRoom() {
+        // 【新規】クライアント側の状態をリセットする関数
+        function cleanupClientState() {
             sessionStorage.removeItem('daifugoRoomId');
-            const roomId = currentRoomId;
-            
             if (unsubscribeRoom) unsubscribeRoom();
             unsubscribeRoom = null;
             currentRoomId = null;
             localGameState = {};
             showScreen(homeScreen);
+            leaveGameBtn.classList.add('hidden');
+        }
 
-            if (!roomId || !currentUser) return;
+        // 【新規】メインの退出処理関数
+        async function handleLeaveGame() {
+            if (!currentRoomId || !currentUser) return cleanupClientState();
 
+            const roomId = currentRoomId;
+            const userId = currentUser.uid;
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, roomId);
+            
             try {
                 await runTransaction(db, async (transaction) => {
                     const roomDoc = await transaction.get(roomRef);
                     if (!roomDoc.exists()) return;
-                    const roomData = roomDoc.data();
-                    const updatedPlayers = roomData.players.filter(p => p.id !== currentUser.uid);
 
-                    if (updatedPlayers.length === 0) {
+                    let roomData = roomDoc.data();
+                    let gameState = roomData.gameState;
+                    
+                    const leavingPlayer = roomData.players.find(p => p.id === userId);
+                    if (!leavingPlayer) return; // 既に参加者でない
+
+                    // プレイヤーを削除
+                    const remainingPlayers = roomData.players.filter(p => p.id !== userId);
+
+                    // 誰もいなくなったらルームを削除
+                    if (remainingPlayers.length === 0) {
                         transaction.delete(roomRef);
-                    } else {
-                        if (roomData.hostId === currentUser.uid) {
-                            transaction.update(roomRef, { players: updatedPlayers, hostId: updatedPlayers[0].id });
-                        } else {
-                            transaction.update(roomRef, { players: updatedPlayers });
-                        }
+                        return;
                     }
+
+                    // ゲーム中の場合、カードを再配分
+                    if (gameState.status !== 'waiting' && gameState.hands && gameState.hands[userId]) {
+                        const leavingPlayerHand = shuffle(gameState.hands[userId] || []);
+                        delete gameState.hands[userId];
+
+                        // カードを再配分
+                        leavingPlayerHand.forEach((card, index) => {
+                            const recipientPlayer = remainingPlayers[index % remainingPlayers.length];
+                            gameState.hands[recipientPlayer.id].push(card);
+                        });
+
+                        // 各プレイヤーの手札をソートし、カード枚数を更新
+                        remainingPlayers.forEach(p => {
+                            gameState.hands[p.id].sort((a,b) => getCardStrength(a, gameState.isRevolution, gameState.isElevenBack));
+                            p.cardCount = gameState.hands[p.id].length;
+                        });
+                        
+                        gameState.players = remainingPlayers;
+                        gameState.playOrder = gameState.playOrder.filter(id => id !== userId);
+                    } else {
+                         gameState.players = remainingPlayers;
+                    }
+
+
+                    // 残り1人になったらその人が勝利
+                    if (remainingPlayers.length === 1 && gameState.status !== 'waiting') {
+                        gameState.status = 'finished';
+                        const winner = remainingPlayers[0];
+                        // ランキングを再設定
+                        const finishedPlayers = gameState.rankings || [];
+                        const otherPlayers = gameState.players.filter(p => p.id !== winner.id && !finishedPlayers.includes(p.id));
+                        gameState.rankings = [...finishedPlayers, winner.id, ...otherPlayers.map(p => p.id)];
+                    }
+
+                    // ターンを調整
+                    if (gameState.currentPlayerId === userId) {
+                        gameState.currentPlayerId = getNextPlayerId(gameState);
+                    }
+
+                    // ホストを交代
+                    if (roomData.hostId === userId) {
+                        roomData.hostId = remainingPlayers[0].id;
+                    }
+                    
+                    transaction.update(roomRef, { 
+                        players: remainingPlayers, 
+                        hostId: roomData.hostId,
+                        gameState: gameState 
+                    });
                 });
             } catch (error) {
-                console.error("ルーム退出エラー:", error);
+                console.error("ゲーム退出処理エラー:", error);
+                showMessage("退出処理中にエラーが発生しました。");
+            } finally {
+                cleanupClientState(); // サーバー処理の結果に関わらずクライアントは退出
             }
         }
 
@@ -497,9 +562,7 @@
 
             const roomData = roomDoc.data();
             const players = roomData.players;
-            if (players.length < 2) {
-                showMessage("プレイヤーが2人以上必要です。"); return;
-            }
+            if (players.length < 2) return showMessage("プレイヤーが2人以上必要です。");
             
             const deck = shuffle(createDeck());
             const hands = {};
@@ -549,21 +612,17 @@
             if (selectedCards.length === 0) return;
             
             const { hands, currentPlayerId, field, isRevolution, isElevenBack } = localGameState;
-            if (currentUser.uid !== currentPlayerId) {
-                showMessage("あなたのターンではありません。"); return;
-            }
+            if (currentUser.uid !== currentPlayerId) return showMessage("あなたのターンではありません。");
             
             const validation = isValidPlay(selectedCards, field, isRevolution, isElevenBack);
-            if (!validation.valid) {
-                showMessage(validation.message); return;
-            }
+            if (!validation.valid) return showMessage(validation.message);
 
             const myHand = hands[currentUser.uid];
             if (myHand.length === selectedCards.length) {
                 const lastCard = selectedCards.find(c => c.suit !== 'JOKER') || selectedCards[0];
                 const strongestCardNumber = isRevolution ? 3 : 2;
                 if (lastCard.suit === 'JOKER' || lastCard.number === strongestCardNumber) {
-                    showMessage("反則あがりです！ジョーカーや最強のカード(2または3)ではあがれません。"); return;
+                    return showMessage("反則あがりです！ジョーカーや最強のカード(2または3)ではあがれません。");
                 }
             }
 
@@ -648,9 +707,7 @@
         
         async function passTurn() {
              const { currentPlayerId } = localGameState;
-            if (currentUser.uid !== currentPlayerId) {
-                showMessage("あなたのターンではありません。"); return;
-            }
+            if (currentUser.uid !== currentPlayerId) return showMessage("あなたのターンではありません。");
 
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             try {
@@ -693,7 +750,7 @@
             let skipTurn = false;
             const player = gameState.players.find(p => p.id === gameState.currentPlayerId);
             
-            if (cardCount === 4 || (cardNum === 3 && cardCount === 3)) {
+            if (cardCount >= 4 || (cardNum === 3 && cardCount === 3)) {
                 gameState.isRevolution = !gameState.isRevolution;
                 gameState.log.push(`${player.name}さんが革命を起こしました！`);
             }
@@ -747,10 +804,12 @@
             let currentIndex = playOrder.indexOf(currentPlayerId);
             if (currentIndex === -1) return playOrder.find(pId => !rankings.includes(pId));
             let nextPlayerId;
+            let count = 0;
             do {
                 currentIndex = (currentIndex + 1) % playOrder.length;
                 nextPlayerId = playOrder[currentIndex];
-            } while (rankings.includes(nextPlayerId));
+                count++;
+            } while (rankings.includes(nextPlayerId) && count < playOrder.length);
             return nextPlayerId;
         }
 
@@ -804,12 +863,13 @@
             unsubscribeRoom = onSnapshot(roomRef, (doc) => {
                 if (!doc.exists()) {
                     showMessage("ルームが削除されました。ホームに戻ります。");
-                    leaveRoom();
+                    cleanupClientState(); // 修正
                     return;
                 }
                 
                 const roomData = doc.data();
                 localGameState = roomData.gameState;
+                leaveGameBtn.classList.remove('hidden'); // 退出ボタンを表示
                 
                 switch (localGameState.status) {
                     case 'waiting':
@@ -881,8 +941,9 @@
             
             const otherPlayersContainer = document.getElementById('other-players-container');
             otherPlayersContainer.innerHTML = '';
+            if(!players) return;
             const myPlayerIndex = players.findIndex(p => currentUser && p.id === currentUser.uid);
-            if (myPlayerIndex === -1) return; // 自分がプレイヤーでない場合は描画を中断
+            if (myPlayerIndex === -1) return;
 
             const orderedPlayers = [...players.slice(myPlayerIndex + 1), ...players.slice(0, myPlayerIndex)];
             
@@ -899,20 +960,20 @@
 
             const fieldContainer = document.getElementById('field');
             fieldContainer.innerHTML = '';
-            (field.cards || []).forEach(card => fieldContainer.appendChild(createCardElement(card)));
-            if (!field.cards || field.cards.length === 0) fieldContainer.innerHTML = `<p class="text-gray-400">カードが出されていません</p>`;
+            (field?.cards || []).forEach(card => fieldContainer.appendChild(createCardElement(card)));
+            if (!field?.cards || field.cards.length === 0) fieldContainer.innerHTML = `<p class="text-gray-400">カードが出されていません</p>`;
 
             const gameInfoEl = document.getElementById('game-info');
             let infoText = '';
             if (isRevolution) infoText += '<span class="text-red-500 font-bold">革命中</span> ';
             if (isElevenBack) infoText += '<span class="text-blue-400 font-bold">イレブンバック中</span> ';
-            if (field.suitLock) infoText += `<span class="text-green-400 font-bold">縛り: ${field.suitLock.split('').join(', ')}</span>`;
+            if (field?.suitLock) infoText += `<span class="text-green-400 font-bold">縛り: ${field.suitLock.split('').join(', ')}</span>`;
             gameInfoEl.innerHTML = infoText;
 
             const isMyTurn = currentPlayerId === currentUser.uid && gameState.status === 'playing';
             document.getElementById('play-card-btn').disabled = !isMyTurn;
-            document.getElementById('pass-btn').disabled = !isMyTurn || !field.cards || field.cards.length === 0;
-            document.getElementById('dobon-btn').disabled = !myHand || myHand.length < 2 || field.lastPlayerId === currentUser.uid || !field.cards || field.cards.length === 0;
+            document.getElementById('pass-btn').disabled = !isMyTurn || !field?.cards || field.cards.length === 0;
+            document.getElementById('dobon-btn').disabled = true; // ドボンは無効
         }
         
         function showGameOverUI(gameState) {
@@ -923,6 +984,7 @@
             
             gameState.rankings.forEach((playerId, index) => {
                 const player = gameState.players.find(p => p.id === playerId);
+                if(!player) return; // 退出したプレイヤーはスキップ
                 const li = document.createElement('div');
                 li.className = "flex justify-between items-center p-2 bg-white/10 rounded";
                 const rankName = rankNames[index] || `${index + 1}位`;
@@ -931,7 +993,7 @@
             });
             
             const host = localGameState.players.find(p => p.id === localGameState.hostId);
-            document.getElementById('next-game-btn').classList.toggle('hidden', currentUser.uid !== host?.id);
+            document.getElementById('next-game-btn').classList.toggle('hidden', !currentUser || currentUser.uid !== host?.id);
         }
         
         function createCardElement(card) {
@@ -962,12 +1024,9 @@
             }
         }
 
-        // =========================================================================
-        // 7渡し/10捨て用のUIとロジック
-        // =========================================================================
         function showSelectionModal(gameState) {
             const { pendingAction, hands } = gameState;
-            if (!pendingAction || selectionModal.classList.contains('hidden') === false) return;
+            if (!pendingAction || !selectionModal.classList.contains('hidden')) return;
 
             const myHand = hands[currentUser.uid];
             cardsForSelection = [];
@@ -1043,7 +1102,6 @@
                  });
                  selectionModal.classList.add('hidden');
                  cardsForSelection = [];
-
             } catch(error) {
                 console.error("選択確定エラー:", error);
                 showMessage(error.message);
@@ -1058,10 +1116,6 @@
         // =========================================================================
         // イベントリスナー
         // =========================================================================
-        window.addEventListener('DOMContentLoaded', () => {
-            //
-        });
-
         document.getElementById('create-room-btn').addEventListener('click', createRoom);
         document.getElementById('join-room-btn').addEventListener('click', joinRoom);
         document.getElementById('start-game-btn').addEventListener('click', startGame);
@@ -1069,8 +1123,9 @@
         document.getElementById('pass-btn').addEventListener('click', passTurn);
         document.getElementById('dobon-btn').addEventListener('click', () => showMessage("ドボン機能は現在調整中です。"));
         document.getElementById('next-game-btn').addEventListener('click', prepareNextGame);
-        document.getElementById('leave-room-btn').addEventListener('click', leaveRoom);
+        document.getElementById('leave-room-btn').addEventListener('click', handleLeaveGame);
         document.getElementById('confirm-selection-btn').addEventListener('click', confirmSelection);
+        leaveGameBtn.addEventListener('click', handleLeaveGame);
     </script>
 </body>
 </html>
