@@ -76,6 +76,7 @@
         .player-info {
             transition: all 0.3s ease;
             transform: scale(1);
+            width: 8rem; /* 128px */
         }
         .player-info.current-turn {
             box-shadow: 0 0 15px rgba(251, 191, 36, 0.8);
@@ -476,7 +477,7 @@
                     if (roomData.gameState.status !== 'waiting') throw new Error("ゲームは既に開始されています。");
 
                     if (!roomData.players.find(p => p.id === currentUser.uid)) {
-                        if (roomData.players.length >= 6) { // 【修正】最大人数を6人に変更
+                        if (roomData.players.length >= 6) {
                             throw new Error("このルームは満員です。");
                         }
                         const newPlayer = { id: currentUser.uid, name: playerName, isReady: false, rank: null, cardCount: 0 };
@@ -1101,15 +1102,14 @@
             
             orderedPlayers.forEach(player => {
                 const playerInfoEl = document.createElement('div');
-                // 【修正】レイアウト調整
-                playerInfoEl.className = 'player-info bg-black/30 p-2 rounded-lg text-center w-32';
+                playerInfoEl.className = 'player-info bg-black/30 p-2 rounded-lg text-center';
                 
                 if (player.id === currentPlayerId && status === 'playing') {
                     playerInfoEl.classList.add('current-turn');
                 }
                 
                 const rank = rankings.indexOf(player.id);
-                const rankText = rank !== -1 ? `<span class="text-yellow-400 font-bold">${getRankName(rank, players.length)}</span>` : '';
+                const rankText = rank !== -1 ? `<span class="text-yellow-400 font-bold">${getRankName(rank, players.length + rankings.length)}</span>` : '';
                 playerInfoEl.innerHTML = `<p class="font-bold truncate">${player.name}</p><p>残り: ${player.cardCount}枚</p><p>${rankText}</p>`;
                 otherPlayersContainer.appendChild(playerInfoEl);
             });
@@ -1144,13 +1144,8 @@
             }
         }
         
-        // 【新規追加】階級名を動的に取得するヘルパー関数
         function getRankName(rankIndex, totalPlayers) {
-            if (rankIndex === 0) return '大富豪';
-            if (rankIndex === totalPlayers - 1) return '大貧民';
-            if (totalPlayers > 3 && rankIndex === 1) return '富豪';
-            if (totalPlayers > 3 && rankIndex === totalPlayers - 2) return '貧民';
-            return '平民';
+            return `${rankIndex + 1}位`;
         }
 
         function showGameOverUI(gameState) {
