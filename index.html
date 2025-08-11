@@ -218,7 +218,7 @@
 
         <div id="game-screen" class="hidden">
             <div id="other-players-container" class="flex justify-around mb-4">
-                </div>
+            </div>
 
             <div class="bg-green-900/50 min-h-[220px] rounded-lg p-4 mb-4 border-2 border-yellow-400/50">
                 <div class="text-center mb-2">
@@ -226,12 +226,12 @@
                     <div id="game-info" class="text-sm text-yellow-300 h-5"></div>
                 </div>
                 <div id="field" class="field-cards">
-                    </div>
+                </div>
             </div>
 
             <div class="fixed bottom-0 left-0 right-0 bg-black/30 backdrop-blur-sm p-4">
                 <div id="my-hand" class="player-hand mb-4">
-                    </div>
+                </div>
                 <div id="action-buttons" class="flex justify-center items-center gap-4">
                     <button id="play-card-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition duration-300 disabled:bg-gray-500">出す</button>
                     <button id="pass-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition duration-300 disabled:bg-gray-500">パス</button>
@@ -244,7 +244,7 @@
             <div class="modal-content bg-gray-800 text-white w-full max-w-md">
                 <h2 id="game-over-title" class="text-3xl font-bold mb-4 text-yellow-300">ゲーム終了！</h2>
                 <div id="rankings-list" class="text-left space-y-2 mb-6">
-                    </div>
+                </div>
                 <button id="next-game-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">次のゲームへ</button>
                 <button id="leave-room-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded ml-2">退出</button>
             </div>
@@ -252,7 +252,7 @@
 
         <div id="message-modal" class="hidden modal-overlay">
             <div id="message-content" class="modal-content bg-gray-800 text-white">
-                </div>
+            </div>
         </div>
 
         <div id="selection-modal" class="hidden modal-overlay">
@@ -260,7 +260,7 @@
                 <h2 id="selection-title" class="text-2xl font-bold mb-2"></h2>
                 <p id="selection-description" class="mb-4"></p>
                 <div id="selection-hand" class="selection-hand">
-                    </div>
+                </div>
                 <button id="confirm-selection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
                     決定
                 </button>
@@ -282,9 +282,6 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-        // =========================================================================
-        // Firebase設定
-        // =========================================================================
         const firebaseConfig = {
             apiKey: "AIzaSyAduXdqwj7aeFAN9sHajCEsX0BDcUWHSv4",
             authDomain: "dai-fugo.firebaseapp.com",
@@ -299,9 +296,6 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
         
-        // =========================================================================
-        // グローバル変数と定数
-        // =========================================================================
         const appId = firebaseConfig.projectId;
         let currentUser = null;
         let currentRoomId = null;
@@ -322,9 +316,6 @@
         const eightGiriModal = document.getElementById('8giri-modal');
         const leaveGameBtn = document.getElementById('leave-game-btn');
 
-        // =========================================================================
-        // 認証処理
-        // =========================================================================
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUser = user;
@@ -342,9 +333,6 @@
             }
         });
 
-        // =========================================================================
-        // 画面遷移・UIヘルパー
-        // =========================================================================
         function showScreen(screen) {
             homeScreen.classList.add('hidden');
             lobbyScreen.classList.add('hidden');
@@ -368,9 +356,6 @@
             });
         }
 
-        // =========================================================================
-        // ルーム管理
-        // =========================================================================
         async function createRoom() {
             if (!currentUser) return showMessage("認証情報が取得できません。");
             const playerName = document.getElementById('player-name').value.trim() || `プレイヤー${Math.floor(Math.random() * 1000)}`;
@@ -516,7 +501,6 @@
                             const winner = activePlayers[0];
                             gameState.rankings.push(winner.id);
                         }
-
                     }
                     
                     if (roomData.hostId === userId) {
@@ -536,9 +520,6 @@
             }
         }
 
-        // =========================================================================
-        // ゲームロジック
-        // =========================================================================
         function createDeck() {
             const deck = [];
             SUITS.forEach(suit => {
@@ -840,9 +821,6 @@
             return { newGameState: gameState, fieldCleared, skipTurn };
         }
 
-        // =========================================================================
-        // ヘルパー関数 (ロジック系)
-        // =========================================================================
         function getCardStrength(card, isRevolution = false, isElevenBack = false) {
             if (card.suit === 'JOKER') return 999;
             const revolutionActive = isRevolution !== isElevenBack;
@@ -915,9 +893,6 @@
             return { valid: true, newSuitLock };
         }
 
-        // =========================================================================
-        // Firestoreリスナー
-        // =========================================================================
         function listenToRoomChanges(roomId) {
             if (unsubscribeRoom) unsubscribeRoom();
 
@@ -972,9 +947,6 @@
             });
         }
         
-        // =========================================================================
-        // UI更新
-        // =========================================================================
         function updateLobbyUI(roomData) {
             document.getElementById('room-id-display').textContent = roomData.roomId;
             const playerList = document.getElementById('player-list');
@@ -996,7 +968,7 @@
         }
 
         function updateGameUI(gameState) {
-            const { players, hands, currentPlayerId, field, isRevolution, isElevenBack, rankings, status, pendingAction } = gameState;
+            const { players, hands, currentPlayerId, field, isRevolution, isElevenBack, rankings, status } = gameState;
             
             const myHandContainer = document.getElementById('my-hand');
             myHandContainer.innerHTML = '';
@@ -1021,7 +993,10 @@
             orderedPlayers.forEach(player => {
                 const playerInfoEl = document.createElement('div');
                 playerInfoEl.className = 'player-info bg-black/30 p-3 rounded-lg text-center w-40';
-                if (player.id === currentPlayerId && status === 'playing') playerInfoEl.classList.add('current-turn');
+                
+                if (player.id === currentPlayerId && status === 'playing') {
+                    playerInfoEl.classList.add('current-turn');
+                }
                 
                 const rank = rankings.indexOf(player.id);
                 const rankText = rank !== -1 ? `<span class="text-yellow-400 font-bold">${rank + 1}位</span>` : '';
@@ -1039,6 +1014,7 @@
             if (isRevolution) infoText += '<span class="text-red-500 font-bold">革命中</span> ';
             if (isElevenBack) infoText += '<span class="text-blue-400 font-bold">イレブンバック中</span> ';
             if (field?.suitLock) infoText += `<span class="text-green-400 font-bold">縛り: ${field.suitLock.split('').join(', ')}</span>`;
+            
             gameInfoEl.innerHTML = infoText;
 
             const isMyTurn = currentPlayerId === currentUser.uid && status === 'playing';
@@ -1046,15 +1022,8 @@
             document.getElementById('play-card-btn').disabled = !isMyTurn || actionLocked;
             document.getElementById('pass-btn').disabled = !isMyTurn || actionLocked || !field?.cards || field.cards.length === 0;
             
-            let canDobon = myHand.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid;
-            if (status === 'awaiting_8giri_confirmation' && pendingAction?.playerId === currentUser.uid) {
-                canDobon = false;
-            }
-            if (status === 'playing' || status === 'awaiting_8giri_confirmation') {
-                 document.getElementById('dobon-btn').disabled = !canDobon;
-            } else {
-                 document.getElementById('dobon-btn').disabled = true;
-            }
+            const canDobon = !actionLocked && myHand.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid;
+            document.getElementById('dobon-btn').disabled = !canDobon;
         }
         
         function showGameOverUI(gameState) {
