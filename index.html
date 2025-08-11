@@ -184,7 +184,7 @@
                     <label for="player-name" class="block mb-2 text-sm font-bold">プレイヤー名</label>
                     <input type="text" id="player-name" class="w-full px-4 py-2 rounded-md text-gray-800" placeholder="名前を入力">
                 </div>
-                
+      
                 <button id="create-room-btn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-800 font-bold py-3 px-4 rounded-lg text-lg transition duration-300 mb-4">
                     ルームを作成する
                 </button>
@@ -194,6 +194,7 @@
                     <button id="join-room-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-r-lg transition duration-300">参加</button>
                 </div>
             </div>
+     
         </div>
 
         <div id="lobby-screen" class="hidden">
@@ -208,7 +209,7 @@
                 <ul id="player-list" class="space-y-2">
                     </ul>
             </div>
-            
+  
             <div class="text-center mt-8">
                 <button id="start-game-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-8 rounded-lg text-xl transition duration-300 shadow-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
                     ゲーム開始 (2人以上で可能)
@@ -233,6 +234,7 @@
                 <div id="my-hand" class="player-hand mb-4">
                     </div>
                 <div id="action-buttons" class="flex justify-center items-center gap-4">
+                    
                     <button id="play-card-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition duration-300 disabled:bg-gray-500">出す</button>
                     <button id="pass-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition duration-300 disabled:bg-gray-500">パス</button>
                     <button id="dobon-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition duration-300 disabled:bg-gray-500">ドボン！</button>
@@ -244,7 +246,7 @@
             <div class="modal-content bg-gray-800 text-white w-full max-w-md">
                 <h2 id="game-over-title" class="text-3xl font-bold mb-4 text-yellow-300">ゲーム終了！</h2>
                 <div id="rankings-list" class="text-left space-y-2 mb-6">
-                    </div>
+                 </div>
                 <button id="next-game-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">次のゲームへ</button>
                 <button id="leave-room-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded ml-2">退出</button>
             </div>
@@ -259,11 +261,20 @@
             <div class="modal-content bg-gray-800 text-white w-full max-w-2xl">
                 <h2 id="selection-title" class="text-2xl font-bold mb-2"></h2>
                 <p id="selection-description" class="mb-4"></p>
+     
                 <div id="selection-hand" class="selection-hand">
                     </div>
                 <button id="confirm-selection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
                     決定
                 </button>
+            </div>
+        </div>
+
+        <div id="eight-cut-modal" class="hidden modal-overlay">
+            <div class="modal-content bg-gray-800 text-white w-full max-w-md">
+                <h2 class="text-3xl font-bold mb-4 text-yellow-300">8切り</h2>
+                <p class="mb-6">場を流します。よろしいですか？<br>（他のプレイヤーはドボンが可能です）</p>
+                <button id="confirm-eight-cut-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">場を流す</button>
             </div>
         </div>
 
@@ -273,7 +284,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
-
         // =========================================================================
         // Firebase設定
         // =========================================================================
@@ -286,11 +296,9 @@
             appId: "1:83747675254:web:652d8bed0fe1ce045f5357",
             measurementId: "G-B1338R181P"
         };
-
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
-        
         // =========================================================================
         // グローバル変数と定数
         // =========================================================================
@@ -311,8 +319,8 @@
         const gameScreen = document.getElementById('game-screen');
         const gameOverModal = document.getElementById('game-over-modal');
         const selectionModal = document.getElementById('selection-modal');
+        const eightCutModal = document.getElementById('eight-cut-modal'); // 8切りモーダルを取得
         const leaveGameBtn = document.getElementById('leave-game-btn');
-
         // =========================================================================
         // 認証処理
         // =========================================================================
@@ -332,7 +340,6 @@
                 }
             }
         });
-
         // =========================================================================
         // 画面遷移・UIヘルパー
         // =========================================================================
@@ -341,6 +348,7 @@
             lobbyScreen.classList.add('hidden');
             gameScreen.classList.add('hidden');
             gameOverModal.classList.add('hidden');
+            eightCutModal.classList.add('hidden'); // 8切りモーダルも隠す
             screen.classList.remove('hidden');
         }
 
@@ -375,7 +383,6 @@
                 gameState: { status: 'waiting' },
                 createdAt: new Date()
             };
-
             try {
                 await setDoc(roomRef, newRoom);
                 currentRoomId = roomId;
@@ -392,17 +399,18 @@
             const roomId = document.getElementById('room-id-input').value.trim().toUpperCase();
             if (!roomId) return showMessage("ルームIDを入力してください。");
             const playerName = document.getElementById('player-name').value.trim() || `プレイヤー${Math.floor(Math.random() * 1000)}`;
-            
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, roomId);
             try {
                 await runTransaction(db, async (transaction) => {
                     const roomDoc = await transaction.get(roomRef);
                     if (!roomDoc.exists()) throw new Error("ルームが見つかりません。");
                     const roomData = roomDoc.data();
+ 
                     if (roomData.gameState.status !== 'waiting') throw new Error("ゲームは既に開始されています。");
 
                     if (!roomData.players.find(p => p.id === currentUser.uid)) {
                         if (roomData.players.length >= 4) throw new Error("このルームは満員です。");
+                   
                         const newPlayer = { id: currentUser.uid, name: playerName, isReady: false, rank: null, cardCount: 0 };
                         transaction.update(roomRef, { players: [...roomData.players, newPlayer] });
                     }
@@ -451,7 +459,6 @@
 
         async function handleLeaveGame() {
             if (!currentRoomId || !currentUser) return cleanupClientState();
-
             const roomId = currentRoomId;
             const userId = currentUser.uid;
             
@@ -495,7 +502,6 @@
                                p.cardCount = gameState.hands[p.id].length;
                            }
                         });
-                        
                         gameState.playOrder = gameState.playOrder.filter(id => id !== userId);
                         if (gameState.currentPlayerId === userId) {
                             gameState.currentPlayerId = getNextPlayerId(gameState);
@@ -515,7 +521,6 @@
                     }
                     
                     gameState.players = remainingPlayers;
-                    
                     transaction.update(roomRef, { 
                         players: remainingPlayers, 
                         hostId: roomData.hostId,
@@ -569,11 +574,9 @@
                 hands[players[playerIndex].id].push(card);
                 playerIndex = (playerIndex + 1) % players.length;
             });
-            
             Object.keys(hands).forEach(playerId => {
                 hands[playerId].sort((a, b) => getCardStrength(a) - getCardStrength(b));
             });
-
             const playOrder = players.map(p => p.id);
             let currentPlayerId;
             const lastGameWinner = players.find(p => p.rank === players.length);
@@ -585,7 +588,6 @@
             }
             
             const updatedPlayers = players.map(p => ({ ...p, cardCount: hands[p.id].length, rank: null }));
-
             const initialGameState = {
                 status: 'playing',
                 hands: hands,
@@ -600,22 +602,20 @@
                 rankings: [],
                 log: [`ゲーム開始！ ${players.find(p=>p.id === currentPlayerId).name}さんからスタートです。`]
             };
-
             await updateDoc(roomRef, { gameState: initialGameState, players: updatedPlayers });
         }
         
         async function playCards() {
             if (selectedCards.length === 0) return;
-            
             const { hands, currentPlayerId, field, isRevolution, isElevenBack } = localGameState;
             if (currentUser.uid !== currentPlayerId) return showMessage("あなたのターンではありません。");
-            
             const validation = isValidPlay(selectedCards, field, isRevolution, isElevenBack);
             if (!validation.valid) return showMessage(validation.message);
 
             const myHand = hands[currentUser.uid];
             if (myHand.length === selectedCards.length) {
-                const lastCard = selectedCards.find(c => c.suit !== 'JOKER') || selectedCards[0];
+                const lastCard = selectedCards.find(c => c.suit !== 'JOKER') ||
+                selectedCards[0];
                 const strongestCardNumber = isRevolution ? 3 : 2;
                 if (lastCard.suit === 'JOKER' || lastCard.number === strongestCardNumber) {
                     return showMessage("反則あがりです！ジョーカーや最強のカード(2または3)ではあがれません。");
@@ -633,7 +633,7 @@
 
                     const newHand = newGameState.hands[currentUser.uid].filter(card => !selectedCards.find(sc => sc.id === card.id));
                     newGameState.hands[currentUser.uid] = newHand;
-                    
+        
                     let updatedPlayers = newGameState.players.map(p => p.id === currentUser.uid ? { ...p, cardCount: newHand.length } : p);
                     newGameState.players = updatedPlayers;
 
@@ -648,12 +648,20 @@
                         newGameState.log.push(`${player.name}さんがあがりました！`);
                     }
 
-                    // 【修正】あがった場合の処理
                     if (playerHasFinished) {
                         newGameState.field = { cards: [], lastPlayerId: null, suitLock: null };
                         newGameState.passCount = 0;
                         newGameState.currentPlayerId = getNextPlayerId(newGameState);
                         newGameState.log.push("場が流れます。");
+                    } else if (playedCardNumber === 8) {
+                        newGameState.status = 'awaiting_8_cut_confirmation';
+                        newGameState.pendingAction = {
+                            type: '8-cut',
+                            playerId: currentUser.uid,
+                        };
+                        newGameState.field = { cards: selectedCards, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                        newGameState.passCount = 0;
+                        newGameState.log.push(`${player.name}さんが8を出し、場の確認中です。`);
                     } else if (playedCardNumber === 7 || playedCardNumber === 10) {
                         newGameState.status = 'awaiting_selection';
                         newGameState.pendingAction = {
@@ -687,7 +695,6 @@
                     }
                     
                     newGameState.lastActionTimestamp = new Date();
-                    
                     const activePlayersCount = newGameState.players.filter(p => !newGameState.rankings.includes(p.id)).length;
                     if (activePlayersCount <= 1) {
                         const lastPlayer = newGameState.players.find(p => !newGameState.rankings.includes(p.id));
@@ -708,7 +715,7 @@
         
         async function passTurn() {
              const { currentPlayerId } = localGameState;
-            if (currentUser.uid !== currentPlayerId) return showMessage("あなたのターンではありません。");
+             if (currentUser.uid !== currentPlayerId) return showMessage("あなたのターンではありません。");
 
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             try {
@@ -720,14 +727,17 @@
                     if (gameState.currentPlayerId !== currentUser.uid) throw new Error("ターンが変わっています。");
                     
                     gameState.passCount += 1;
+                   
                     const activePlayersCount = gameState.players.filter(p => p.cardCount > 0 && !gameState.rankings.includes(p.id)).length;
 
                     if (gameState.passCount >= activePlayersCount - 1 && gameState.field.lastPlayerId) {
                         gameState.currentPlayerId = gameState.field.lastPlayerId;
                         gameState.field = { cards: [], lastPlayerId: null, suitLock: null };
+   
                         gameState.passCount = 0;
                         gameState.log.push("場が流れました。");
                         if (gameState.isElevenBack) {
+                           
                             gameState.isElevenBack = false;
                             gameState.log.push("イレブンバックの効果が切れました。");
                         }
@@ -754,7 +764,6 @@
 
             const handSum = myHand.reduce((sum, card) => sum + getDobonValue(card), 0);
             const fieldSum = field.cards.reduce((sum, card) => sum + getDobonValue(card), 0);
-
             if (handSum !== fieldSum) {
                 return showMessage(`ドボン失敗！ 手札合計: ${handSum}, 場の合計: ${fieldSum}`);
             }
@@ -767,7 +776,6 @@
                     
                     let gameState = roomDoc.data().gameState;
                     
-                    // 【修正】ドボン成功時の処理
                     gameState.rankings.push(currentUser.uid); // ドボンした人をランキングに追加
                     const winnerPlayer = gameState.players.find(p => p.id === currentUser.uid);
                     gameState.log.push(`🎉 ${winnerPlayer.name}さんがドボンであがりました！`);
@@ -775,8 +783,7 @@
                     gameState.field = { cards: [], lastPlayerId: null, suitLock: null }; // 場を流す
                     gameState.currentPlayerId = getNextPlayerId(gameState); // 次の人が親
                     gameState.log.push("場が流れます。");
-                    
-                    // 残り1人か確認
+ 
                     const activePlayersCount = gameState.players.filter(p => !gameState.rankings.includes(p.id)).length;
                     if (activePlayersCount <= 1) {
                         const lastPlayer = gameState.players.find(p => !gameState.rankings.includes(p.id));
@@ -798,7 +805,8 @@
             const player = gameState.players.find(p => p.id === gameState.currentPlayerId);
             const nonJokers = playedCards.filter(c => c.suit !== 'JOKER');
             const uniqueNumbers = [...new Set(nonJokers.map(c => c.number))];
-            const cardNum = uniqueNumbers[0] || (playedCards.find(c => c.suit === 'JOKER') ? playedCards[0].number : null);
+            const cardNum = uniqueNumbers[0] ||
+            (playedCards.find(c => c.suit === 'JOKER') ? playedCards[0].number : null);
             const cardCount = playedCards.length;
             
             let fieldCleared = false;
@@ -806,7 +814,6 @@
             
             const isFourCardRevolution = (cardCount === 4 && uniqueNumbers.length <= 1);
             const isThreeThreesRevolution = (cardCount === 3 && nonJokers.length === 3 && cardNum === 3);
-
             if (isFourCardRevolution || isThreeThreesRevolution) {
                 gameState.isRevolution = !gameState.isRevolution;
                 gameState.log.push(`${player.name}さんが革命を起こしました！`);
@@ -833,14 +840,50 @@
                         gameState.log.push(`${player.name}さんが5を出し、${cardCount}人スキップ！`);
                     }
                     break;
-                case 8:
-                    fieldCleared = true;
-                    gameState.log.push(`${player.name}さんの8切り！`);
-                    break;
+                // 8切りは非同期処理になったため、ここからは削除
             }
             return { newGameState: gameState, fieldCleared, skipTurn };
         }
 
+        async function confirmEightCut() {
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const roomDoc = await transaction.get(roomRef);
+                    if (!roomDoc.exists()) throw new Error("ルームデータが見つかりません。");
+                    let gameState = roomDoc.data().gameState;
+
+                    if (gameState.status !== 'awaiting_8_cut_confirmation' || gameState.pendingAction.playerId !== currentUser.uid) {
+                        throw new Error("不正な操作です。");
+                    }
+
+                    // 場を流す
+                    gameState.field = { cards: [], lastPlayerId: null, suitLock: null };
+                    gameState.passCount = 0;
+                    gameState.log.push("8切りにより場が流れました。");
+
+                    // ターンは8を出したプレイヤーのまま
+                    gameState.currentPlayerId = currentUser.uid;
+
+                    // ゲーム状態を通常に戻す
+                    gameState.status = 'playing';
+                    delete gameState.pendingAction;
+                    
+                    // イレブンバック効果が有効だった場合、リセットする
+                    if (gameState.isElevenBack) {
+                        gameState.isElevenBack = false;
+                        gameState.log.push("イレブンバックの効果が切れました。");
+                    }
+
+                    transaction.update(roomRef, { gameState });
+                });
+                eightCutModal.classList.add('hidden');
+            } catch (error) {
+                console.error("8切り確定エラー:", error);
+                showMessage(error.message);
+            }
+        }
+        
         // =========================================================================
         // ヘルパー関数 (ロジック系)
         // =========================================================================
@@ -857,10 +900,8 @@
             return strength;
         }
 
-        // 【修正】ドボンの計算ルール変更
         function getDobonValue(card) {
             if (card.suit === 'JOKER') return 0;
-            // Jは11, Qは12, Kは13, Aは1として、カードの数字をそのまま返す
             return card.number;
         }
         
@@ -880,13 +921,10 @@
 
         function isValidPlay(playedCards, field, isRevolution, isElevenBack) {
             if (playedCards.length === 0) return { valid: false, message: "カードを選択してください。" };
-
             const playIsJoker = playedCards.length === 1 && playedCards[0].suit === 'JOKER';
             const playIsSpade3 = playedCards.length === 1 && playedCards[0].suit === 'S' && playedCards[0].number === 3;
             const fieldIsJoker = field.cards.length === 1 && field.cards[0].suit === 'JOKER';
-            
             if (fieldIsJoker && playIsSpade3) return { valid: true, newSuitLock: null };
-            
             if (field.cards.length > 0) {
                 if (playedCards.length !== field.cards.length) {
                     if (!playIsJoker) {
@@ -896,9 +934,7 @@
                 
                 const playStrength = getCardStrength(playedCards.find(c => c.suit !== 'JOKER') || playedCards[0], isRevolution, isElevenBack);
                 const fieldStrength = getCardStrength(field.cards.find(c => c.suit !== 'JOKER') || field.cards[0], isRevolution, isElevenBack);
-                
                 if (playStrength <= fieldStrength) return { valid: false, message: "場よりも強いカードを出してください。" };
-                
                 if (field.suitLock) {
                     const playSuits = playedCards.map(c => c.suit).filter(s => s !== 'JOKER').sort().join('');
                     if (playSuits && field.suitLock !== playSuits) return { valid: false, message: `縛りが発生しています！スート: [${field.suitLock.split('').join(', ')}]` };
@@ -923,7 +959,6 @@
         // =========================================================================
         function listenToRoomChanges(roomId) {
             if (unsubscribeRoom) unsubscribeRoom();
-
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, roomId);
             unsubscribeRoom = onSnapshot(roomRef, (doc) => {
                 if (!doc.exists()) {
@@ -936,6 +971,10 @@
                 localGameState = roomData.gameState;
                 leaveGameBtn.classList.remove('hidden');
                 
+                // 他のモーダルが表示されていたら閉じる
+                selectionModal.classList.add('hidden');
+                eightCutModal.classList.add('hidden');
+
                 switch (localGameState.status) {
                     case 'waiting':
                         showScreen(lobbyScreen);
@@ -943,10 +982,8 @@
                         break;
                     
                     case 'playing':
-                        if(selectionModal.classList.contains('hidden')) {
-                             showScreen(gameScreen);
-                             updateGameUI(localGameState);
-                        }
+                        showScreen(gameScreen);
+                        updateGameUI(localGameState);
                         break;
                         
                     case 'awaiting_selection':
@@ -956,7 +993,15 @@
                             showSelectionModal(localGameState);
                         }
                         break;
-                        
+                    
+                    case 'awaiting_8_cut_confirmation':
+                        showScreen(gameScreen);
+                        updateGameUI(localGameState);
+                        if (localGameState.pendingAction.playerId === currentUser.uid) {
+                            showEightCutModal();
+                        }
+                        break;
+
                     case 'finished':
                         showScreen(gameScreen);
                         updateGameUI(localGameState);
@@ -990,12 +1035,10 @@
         }
 
         function updateGameUI(gameState) {
-            const { players, hands, currentPlayerId, field, isRevolution, isElevenBack, rankings } = gameState;
-            
+            const { players, hands, currentPlayerId, field, isRevolution, isElevenBack, rankings, status } = gameState;
             const myHandContainer = document.getElementById('my-hand');
             myHandContainer.innerHTML = '';
             const myHand = (hands && currentUser && hands[currentUser.uid]) ? hands[currentUser.uid] : [];
-            
             myHand.sort((a,b) => getCardStrength(a, isRevolution, isElevenBack) - getCardStrength(b, isRevolution, isElevenBack));
             myHand.forEach(card => {
                 const cardEl = createCardElement(card);
@@ -1011,18 +1054,17 @@
             if (myPlayerIndex === -1) return;
 
             const orderedPlayers = [...players.slice(myPlayerIndex + 1), ...players.slice(0, myPlayerIndex)];
-            
             orderedPlayers.forEach(player => {
                 const playerInfoEl = document.createElement('div');
                 playerInfoEl.className = 'player-info bg-black/30 p-3 rounded-lg text-center w-40';
-                if (player.id === currentPlayerId) playerInfoEl.classList.add('current-turn');
+                if (player.id === currentPlayerId && status !== 'awaiting_8_cut_confirmation') playerInfoEl.classList.add('current-turn');
                 
                 const rank = rankings.indexOf(player.id);
+ 
                 const rankText = rank !== -1 ? `<span class="text-yellow-400 font-bold">${rank + 1}位</span>` : '';
                 playerInfoEl.innerHTML = `<p class="font-bold truncate">${player.name}</p><p>残り: ${player.cardCount}枚</p><p>${rankText}</p>`;
                 otherPlayersContainer.appendChild(playerInfoEl);
             });
-
             const fieldContainer = document.getElementById('field');
             fieldContainer.innerHTML = '';
             (field?.cards || []).forEach(card => fieldContainer.appendChild(createCardElement(card)));
@@ -1034,12 +1076,13 @@
             if (isElevenBack) infoText += '<span class="text-blue-400 font-bold">イレブンバック中</span> ';
             if (field?.suitLock) infoText += `<span class="text-green-400 font-bold">縛り: ${field.suitLock.split('').join(', ')}</span>`;
             gameInfoEl.innerHTML = infoText;
-
-            const isMyTurn = currentPlayerId === currentUser.uid && gameState.status === 'playing';
+            
+            const isMyTurn = currentPlayerId === currentUser.uid && status === 'playing';
             document.getElementById('play-card-btn').disabled = !isMyTurn;
             document.getElementById('pass-btn').disabled = !isMyTurn || !field?.cards || field.cards.length === 0;
             
-            const canDobon = myHand.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid;
+            // ドボンはいつでも可能だが、自分の8切り確認中は無効
+            const canDobon = myHand.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid && status !== 'awaiting_8_cut_confirmation';
             document.getElementById('dobon-btn').disabled = !canDobon;
         }
         
@@ -1048,17 +1091,16 @@
             const rankingsList = document.getElementById('rankings-list');
             rankingsList.innerHTML = '';
             const rankNames = ['大富豪', '富豪', '貧民', '大貧民'];
-            
             gameState.rankings.forEach((playerId, index) => {
                 const player = gameState.players.find(p => p.id === playerId);
                 if(!player) return;
                 const li = document.createElement('div');
                 li.className = "flex justify-between items-center p-2 bg-white/10 rounded";
+               
                 const rankName = rankNames[index] || `${index + 1}位`;
                 li.innerHTML = `<span class="font-bold text-yellow-400">${rankName}</span><span>${player.name}</span>`;
                 rankingsList.appendChild(li);
             });
-            
             const host = localGameState.players.find(p => p.id === localGameState.hostId);
             document.getElementById('next-game-btn').classList.toggle('hidden', !currentUser || currentUser.uid !== host?.id);
         }
@@ -1092,10 +1134,9 @@
         }
 
         function showSelectionModal(gameState) {
-            const { pendingAction, hands } = gameState;
-            if (!pendingAction || !selectionModal.classList.contains('hidden')) return;
+            if (!gameState.pendingAction || !selectionModal.classList.contains('hidden')) return;
 
-            const myHand = hands[currentUser.uid];
+            const myHand = gameState.hands[currentUser.uid];
             cardsForSelection = [];
 
             const titleEl = document.getElementById('selection-title');
@@ -1103,18 +1144,21 @@
             const handContainer = document.getElementById('selection-hand');
             const confirmBtn = document.getElementById('confirm-selection-btn');
             
-            titleEl.textContent = pendingAction.type === '7-pass' ? '7渡し' : '10捨て';
-            descriptionEl.textContent = `手札から${pendingAction.type === '7-pass' ? '渡す' : '捨てる'}カードを ${pendingAction.count}枚 選んでください。`;
+            titleEl.textContent = gameState.pendingAction.type === '7-pass' ? '7渡し' : '10捨て';
+            descriptionEl.textContent = `手札から${gameState.pendingAction.type === '7-pass' ? '渡す' : '捨てる'}カードを ${gameState.pendingAction.count}枚 選んでください。`;
             
             handContainer.innerHTML = '';
             myHand.forEach(card => {
                 const cardEl = createCardElement(card);
-                cardEl.addEventListener('click', () => toggleCardForSelection(card, cardEl, pendingAction.count));
+                cardEl.addEventListener('click', () => toggleCardForSelection(card, cardEl, gameState.pendingAction.count));
                 handContainer.appendChild(cardEl);
             });
-            
             confirmBtn.disabled = true;
             selectionModal.classList.remove('hidden');
+        }
+
+        function showEightCutModal() {
+            eightCutModal.classList.remove('hidden');
         }
 
         function toggleCardForSelection(card, element, maxSelection) {
@@ -1140,6 +1184,7 @@
                     if (!roomDoc.exists()) throw new Error("ルームが見つかりません。");
 
                     let gameState = roomDoc.data().gameState;
+      
                     const { pendingAction, hands, players } = gameState;
 
                     if (!pendingAction || pendingAction.playerId !== currentUser.uid) throw new Error("不正な操作です。");
@@ -1150,6 +1195,7 @@
 
                     if (pendingAction.type === '7-pass') {
                         const nextPlayerId = getNextPlayerId(gameState);
+                  
                         const nextPlayer = players.find(p => p.id === nextPlayerId);
                         hands[nextPlayerId].push(...cardsForSelection);
                         hands[nextPlayerId].sort((a,b) => getCardStrength(a, gameState.isRevolution, gameState.isElevenBack));
@@ -1159,14 +1205,13 @@
                     }
 
                     hands[currentUser.uid] = myNewHand;
-                    
                     gameState.players = players.map(p => ({...p, cardCount: hands[p.id].length }));
                     gameState.status = 'playing';
                     gameState.currentPlayerId = getNextPlayerId(gameState);
                     delete gameState.pendingAction;
 
                     transaction.update(roomRef, { gameState });
-                 });
+                });
                  selectionModal.classList.add('hidden');
                  cardsForSelection = [];
             } catch(error) {
@@ -1194,6 +1239,7 @@
         leaveGameBtn.addEventListener('click', confirmAndLeave);
         
         document.getElementById('confirm-selection-btn').addEventListener('click', confirmSelection);
+        document.getElementById('confirm-eight-cut-btn').addEventListener('click', confirmEightCut); // 8切り確認ボタンのリスナーを追加
     </script>
 </body>
 </html>
