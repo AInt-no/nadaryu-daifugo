@@ -400,7 +400,6 @@
             setTimeout(() => modal.classList.add('hidden'), duration);
         }
 
-        // 【修正】iPhoneでのコピーに対応
         function copyRoomId() {
             const roomId = document.getElementById('room-id-display').textContent;
 
@@ -408,7 +407,6 @@
                 navigator.clipboard.writeText(roomId).then(() => {
                     showMessage('ルームIDをコピーしました！');
                 }).catch(err => {
-                    console.error('クリップボードAPIでのコピーに失敗:', err);
                     fallbackCopyTextToClipboard(roomId);
                 });
             } else {
@@ -433,7 +431,6 @@
                     showMessage('コピーに失敗しました。');
                 }
             } catch (err) {
-                console.error('execCommandでのコピーに失敗:', err);
                 showMessage('コピーに失敗しました。');
             }
             document.body.removeChild(textArea);
@@ -479,7 +476,9 @@
                     if (roomData.gameState.status !== 'waiting') throw new Error("ゲームは既に開始されています。");
 
                     if (!roomData.players.find(p => p.id === currentUser.uid)) {
-                        if (roomData.players.length >= 4) throw new Error("このルームは満員です。");
+                        if (roomData.players.length >= 6) { // 【修正】最大人数を6人に変更
+                            throw new Error("このルームは満員です。");
+                        }
                         const newPlayer = { id: currentUser.uid, name: playerName, isReady: false, rank: null, cardCount: 0 };
                         transaction.update(roomRef, { players: [...roomData.players, newPlayer] });
                     }
@@ -1102,14 +1101,15 @@
             
             orderedPlayers.forEach(player => {
                 const playerInfoEl = document.createElement('div');
-                playerInfoEl.className = 'player-info bg-black/30 p-3 rounded-lg text-center w-40';
+                // 【修正】レイアウト調整
+                playerInfoEl.className = 'player-info bg-black/30 p-2 rounded-lg text-center w-32';
                 
                 if (player.id === currentPlayerId && status === 'playing') {
                     playerInfoEl.classList.add('current-turn');
                 }
                 
                 const rank = rankings.indexOf(player.id);
-                const rankText = rank !== -1 ? `<span class="text-yellow-400 font-bold">${rank + 1}位</span>` : '';
+                const rankText = rank !== -1 ? `<span class="text-yellow-400 font-bold">${getRankName(rank, players.length)}</span>` : '';
                 playerInfoEl.innerHTML = `<p class="font-bold truncate">${player.name}</p><p>残り: ${player.cardCount}枚</p><p>${rankText}</p>`;
                 otherPlayersContainer.appendChild(playerInfoEl);
             });
@@ -1133,7 +1133,7 @@
             document.getElementById('play-card-btn').disabled = !isMyTurn || actionLocked;
             document.getElementById('pass-btn').disabled = !isMyTurn || actionLocked || !field?.cards || field.cards.length === 0;
             
-            let canDobon = myHand.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid;
+            let canDobon = !actionLocked && myHand.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid;
             if (status.includes('confirmation') && localGameState.pendingAction?.playerId === currentUser.uid) {
                 canDobon = false;
             }
@@ -1144,24 +1144,34 @@
             }
         }
         
+        // 【新規追加】階級名を動的に取得するヘルパー関数
+        function getRankName(rankIndex, totalPlayers) {
+            if (rankIndex === 0) return '大富豪';
+            if (rankIndex === totalPlayers - 1) return '大貧民';
+            if (totalPlayers > 3 && rankIndex === 1) return '富豪';
+            if (totalPlayers > 3 && rankIndex === totalPlayers - 2) return '貧民';
+            return '平民';
+        }
+
         function showGameOverUI(gameState) {
             gameOverModal.classList.remove('hidden');
             const rankingsList = document.getElementById('rankings-list');
             rankingsList.innerHTML = '';
-            const rankNames = ['大富豪', '富豪', '貧民', '大貧民'];
             
+            const totalPlayers = gameState.players.length + gameState.rankings.length;
+
             gameState.rankings.forEach((playerId, index) => {
-                const player = gameState.players.find(p => p.id === playerId);
+                const player = localGameState.players.find(p => p.id === playerId) || gameState.players.find(p => p.id === playerId);
                 if(!player) return;
                 const li = document.createElement('div');
                 li.className = "flex justify-between items-center p-2 bg-white/10 rounded";
-                const rankName = rankNames[index] || `${index + 1}位`;
+                const rankName = getRankName(index, totalPlayers);
                 li.innerHTML = `<span class="font-bold text-yellow-400">${rankName}</span><span>${player.name}</span>`;
                 rankingsList.appendChild(li);
             });
             
-            const host = localGameState.players.find(p => p.id === localGameState.hostId);
-            document.getElementById('next-game-btn').classList.toggle('hidden', !currentUser || currentUser.uid !== host?.id);
+            const hostId = localGameState.hostId || gameState.hostId;
+            document.getElementById('next-game-btn').classList.toggle('hidden', !currentUser || currentUser.uid !== hostId);
         }
         
         function createCardElement(card) {
