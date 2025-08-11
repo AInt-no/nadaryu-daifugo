@@ -173,7 +173,7 @@
     <div id="app" class="container mx-auto p-4 max-w-7xl">
 
         <button id="reload-btn" onclick="location.reload()" title="ページを更新">🔄</button>
-        <button id="leave-game-btn" class="hidden">ルームから退出</button>
+        <button id="leave-game-btn" class="hidden">退出</button>
 
         <div id="home-screen" class="text-center py-12">
             <h1 class="text-5xl font-bold mb-4 text-yellow-300">オンライン大富豪</h1>
@@ -246,7 +246,7 @@
                 <div id="rankings-list" class="text-left space-y-2 mb-6">
                     </div>
                 <button id="next-game-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">次のゲームへ</button>
-                <button id="leave-room-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded ml-2">ルームを抜ける</button>
+                <button id="leave-room-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded ml-2">退出</button>
             </div>
         </div>
 
@@ -360,7 +360,7 @@
         }
 
         // =========================================================================
-        // ルーム管理 (修正箇所)
+        // ルーム管理
         // =========================================================================
         async function createRoom() {
             if (!currentUser) return showMessage("認証情報が取得できません。");
@@ -507,11 +507,14 @@
                             const winner = activePlayers[0];
                             gameState.rankings.push(winner.id);
                         }
+
                     }
                     
                     if (roomData.hostId === userId) {
                         roomData.hostId = remainingPlayers[0].id;
                     }
+                    
+                    gameState.players = remainingPlayers;
                     
                     transaction.update(roomRef, { 
                         players: remainingPlayers, 
