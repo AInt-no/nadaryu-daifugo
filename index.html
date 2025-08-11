@@ -717,13 +717,12 @@
                     if (newGameState.currentPlayerId !== currentUser.uid) throw new Error("ターンが変わっています。");
                     
                     const newHand = newGameState.hands[currentUser.uid].filter(card => !cardsToPlay.find(sc => sc.id === card.id));
-                    
                     const playedCardNumber = (cardsToPlay.find(c => c.suit !== 'JOKER') || cardsToPlay[0]).number;
                     const playedCardCount = cardsToPlay.length;
                     const player = newGameState.players.find(p => p.id === currentUser.uid);
-
                     let playerHasFinished = false;
                     
+                    // 【修正】7渡しでのあがり判定と手札更新のロジックを修正
                     if (playedCardNumber === 7 && newHand.length > 0 && newHand.length <= playedCardCount) {
                         playerHasFinished = true;
                         const nextPlayerId = getNextPlayerId(newGameState);
@@ -731,17 +730,19 @@
                             newGameState.hands[nextPlayerId].push(...newHand);
                             newGameState.hands[nextPlayerId].sort((a,b)=>getCardStrength(a, newGameState.isRevolution, newGameState.isElevenBack));
                         }
-                        newGameState.hands[currentUser.uid] = [];
+                        newGameState.hands[currentUser.uid] = []; // 渡すので手札は空になる
                         newGameState.log.push(`${player.name}さんが7渡しで手札を全て渡し、あがりました！`);
                     } else if (newHand.length === 0) {
                         playerHasFinished = true;
+                        newGameState.hands[currentUser.uid] = []; // 最後のカードを出したので手札は空
                         newGameState.log.push(`${player.name}さんがあがりました！`);
+                    } else {
+                        newGameState.hands[currentUser.uid] = newHand; // 通常は手札を更新
                     }
 
                     if(playerHasFinished) {
                         newGameState.rankings.push(currentUser.uid);
                     }
-                    newGameState.hands[currentUser.uid] = newHand;
                     newGameState.players = newGameState.players.map(p => ({...p, cardCount: newGameState.hands[p.id]?.length || 0 }));
                     
                     if (playerHasFinished) {
