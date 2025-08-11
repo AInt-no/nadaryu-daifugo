@@ -360,7 +360,7 @@
         }
 
         // =========================================================================
-        // ルーム管理
+        // ルーム管理 (修正箇所)
         // =========================================================================
         async function createRoom() {
             if (!currentUser) return showMessage("認証情報が取得できません。");
@@ -443,9 +443,8 @@
             leaveGameBtn.classList.add('hidden');
         }
 
-        // 【新規】退出確認用の関数
         function confirmAndLeave() {
-            if (confirm("本当にルームから退出しますか？\nゲームの途中でも退出となり、手札は他のプレイヤーに配られます。")) {
+            if (confirm("本当にルームから退出しますか？")) {
                 handleLeaveGame();
             }
         }
@@ -456,7 +455,6 @@
             const roomId = currentRoomId;
             const userId = currentUser.uid;
             
-            // 先にクライアント側の状態をリセットして画面遷移
             cleanupClientState();
 
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, roomId);
@@ -471,19 +469,18 @@
                     const leavingPlayer = roomData.players.find(p => p.id === userId);
                     if (!leavingPlayer) return;
 
-                    const remainingPlayers = roomData.players.filter(p => p.id !== userId);
+                    let remainingPlayers = roomData.players.filter(p => p.id !== userId);
 
                     if (remainingPlayers.length === 0) {
                         transaction.delete(roomRef);
                         return;
                     }
-                    
-                    // 待機中かゲーム中かで処理を分岐
+
                     if (gameState.status !== 'waiting') {
                         const leavingPlayerHand = shuffle(gameState.hands?.[userId] || []);
                         if(gameState.hands) delete gameState.hands[userId];
 
-                        if (leavingPlayerHand.length > 0) {
+                        if (leavingPlayerHand.length > 0 && remainingPlayers.length > 0) {
                             leavingPlayerHand.forEach((card, index) => {
                                 const recipientPlayer = remainingPlayers[index % remainingPlayers.length];
                                 if (gameState.hands[recipientPlayer.id]) {
@@ -504,18 +501,14 @@
                             gameState.currentPlayerId = getNextPlayerId(gameState);
                         }
 
-                        // 残り1人になったらその人が勝利
                         const activePlayers = remainingPlayers.filter(p => !gameState.rankings.includes(p.id));
                         if (activePlayers.length === 1) {
                             gameState.status = 'finished';
                             const winner = activePlayers[0];
                             gameState.rankings.push(winner.id);
                         }
-
                     }
                     
-                    gameState.players = remainingPlayers;
-
                     if (roomData.hostId === userId) {
                         roomData.hostId = remainingPlayers[0].id;
                     }
@@ -809,7 +802,7 @@
                 currentIndex = (currentIndex + 1) % playOrder.length;
                 nextPlayerId = playOrder[currentIndex];
                 count++;
-            } while (rankings.includes(nextPlayerId) && count < playOrder.length);
+            } while (rankings.includes(nextPlayerId) && count < playOrder.length * 2);
             return nextPlayerId;
         }
 
@@ -1123,7 +1116,6 @@
         document.getElementById('pass-btn').addEventListener('click', passTurn);
         document.getElementById('dobon-btn').addEventListener('click', () => showMessage("ドボン機能は現在調整中です。"));
         document.getElementById('next-game-btn').addEventListener('click', prepareNextGame);
-        // 【修正】両方の退出ボタンが確認関数を呼び出すように変更
         document.getElementById('leave-room-btn').addEventListener('click', confirmAndLeave);
         leaveGameBtn.addEventListener('click', confirmAndLeave);
         
