@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>灘流　大富豪</title>
+    <title>灘流大富豪</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&display=swap');
@@ -211,7 +211,7 @@
         <button id="leave-game-btn" class="hidden">退出</button>
 
         <div id="home-screen" class="text-center py-12">
-            <h1 class="text-5xl font-bold mb-4 text-yellow-300">灘流　大富豪</h1>
+            <h1 class="text-5xl font-bold mb-4 text-yellow-300">灘流大富豪</h1>
             <p class="mb-8 text-lg">ルームを作成するか、IDを入力して参加してください。</p>
             <div class="max-w-md mx-auto bg-white/10 p-8 rounded-lg shadow-lg backdrop-blur-sm">
                 <div class="mb-6">
@@ -1086,8 +1086,7 @@
             const myPlayerRank = rankings ? rankings.indexOf(currentUser.uid) : -1;
 
             if (myPlayerRank !== -1) {
-                const totalPlayers = (players?.length || 0) + (rankings?.length || 0);
-                myHandContainer.innerHTML = `<div class="text-center text-3xl font-bold py-12 text-yellow-300">あなたは ${getRankName(myPlayerRank, totalPlayers)} です！</div>`;
+                myHandContainer.innerHTML = `<div class="text-center text-3xl font-bold py-12 text-yellow-300">あなたは ${getRankName(myPlayerRank, (players?.length || 0) + (rankings?.length || 0))} です！</div>`;
             } else {
                 myHandContainer.innerHTML = '';
                 const myHand = (hands && currentUser && hands[currentUser.uid]) ? hands[currentUser.uid] : [];
@@ -1106,11 +1105,11 @@
             if(!players) return;
             const myPlayerIndex = players.findIndex(p => currentUser && p.id === currentUser.uid);
 
-            const orderedPlayers = myPlayerIndex !== -1 ? [...players.slice(myPlayerIndex + 1), ...players.slice(0, myPlayerIndex)] : players;
+            const orderedPlayers = myPlayerIndex !== -1 ? [...players.slice(myPlayerIndex + 1), ...players.slice(0, myPlayerIndex)] : players.filter(p => p.id !== currentUser.uid);
             
             orderedPlayers.forEach(player => {
                 const playerInfoEl = document.createElement('div');
-                playerInfoEl.className = 'player-info bg-black/30 p-2 rounded-lg text-center';
+                playerInfoEl.className = 'player-info bg-black/30 p-2 rounded-lg text-center w-32';
                 
                 if (player.id === currentPlayerId && status === 'playing') {
                     playerInfoEl.classList.add('current-turn');
@@ -1139,8 +1138,8 @@
             const isMyTurn = currentPlayerId === currentUser.uid && status === 'playing';
             const myHandForButtons = (hands && currentUser && hands[currentUser.uid]) ? hands[currentUser.uid] : [];
 
-            document.getElementById('play-card-btn').disabled = !isMyTurn || actionLocked;
-            document.getElementById('pass-btn').disabled = !isMyTurn || actionLocked || !field?.cards || field.cards.length === 0;
+            document.getElementById('play-card-btn').disabled = !isMyTurn || actionLocked || myPlayerRank !== -1;
+            document.getElementById('pass-btn').disabled = !isMyTurn || actionLocked || myPlayerRank !== -1 || !field?.cards || field.cards.length === 0;
             
             let canDobon = !actionLocked && myHandForButtons.length >= 2 && field?.cards?.length > 0 && field.lastPlayerId !== currentUser.uid;
             if (status && status.includes('confirmation') && localGameState.pendingAction?.playerId === currentUser.uid) {
@@ -1158,21 +1157,18 @@
         }
 
         function showGameOverUI(gameState) {
-            if (!gameState || !gameState.rankings || !gameState.players) return;
+            if (!gameState || !gameState.rankings) return;
             gameOverModal.classList.remove('hidden');
             const rankingsList = document.getElementById('rankings-list');
             rankingsList.innerHTML = '';
             
-            const totalPlayersInGame = (localGameState.players?.length || 0) + (localGameState.rankings?.length || 0);
+            const finalPlayers = [...(gameState.players || []), ...(localGameState.players || [])];
+            const allPlayers = [...new Map(finalPlayers.map(p => [p.id, p])).values()];
+            
+            const totalPlayersInGame = allPlayers.length;
 
-            // あがったプレイヤーと残ったプレイヤーを結合して最終順位リストを作成
-            const finalRankedPlayers = [...gameState.rankings];
-            const remainingPlayers = (gameState.players || []).filter(p => !finalRankedPlayers.includes(p.id));
-            remainingPlayers.sort((a,b) => a.cardCount - b.cardCount); // 残りカードが少ない順
-            finalRankedPlayers.push(...remainingPlayers.map(p=>p.id));
-
-            finalRankedPlayers.forEach((playerId, index) => {
-                const player = (localGameState.players || []).concat(gameState.players).find(p => p.id === playerId);
+            gameState.rankings.forEach((playerId, index) => {
+                const player = allPlayers.find(p => p.id === playerId);
                 if(!player) return;
                 const li = document.createElement('div');
                 li.className = "flex justify-between items-center p-2 bg-white/10 rounded";
@@ -1386,11 +1382,11 @@
                         gameState.currentPlayerId = currentUser.uid;
                         gameState.log.push(`5で他の全員がスキップされ、場が流れました。`);
                     } else {
-                        let tempCurrentPlayerId = currentUser.uid;
+                        let lastSkippedPlayerId = currentUser.uid;
                         for (let i = 0; i < skips; i++) {
-                            tempCurrentPlayerId = getNextPlayerId({ ...gameState, currentPlayerId: tempCurrentPlayerId });
+                            lastSkippedPlayerId = getNextPlayerId({ ...gameState, currentPlayerId: lastSkippedPlayerId });
                         }
-                        gameState.currentPlayerId = getNextPlayerId({ ...gameState, currentPlayerId: tempCurrentPlayerId });
+                        gameState.currentPlayerId = getNextPlayerId({ ...gameState, currentPlayerId: lastSkippedPlayerId });
                         gameState.log.push(`5を${cardCount}枚出し、${skips}人スキップ！`);
                     }
 
