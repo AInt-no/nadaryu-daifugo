@@ -261,7 +261,7 @@
             <div class="modal-content bg-gray-800 text-white w-full max-w-md">
                 <h2 id="game-over-title" class="text-3xl font-bold mb-4 text-yellow-300">ゲーム終了！</h2>
                 <div id="rankings-list" class="text-left space-y-2 mb-6"></div>
-                <button id="next-game-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">次のゲームへ</button>
+                <button id="next-game-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">次へ</button>
                 <button id="leave-room-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded ml-2">退出</button>
             </div>
         </div>
@@ -1086,7 +1086,8 @@
             const myPlayerRank = rankings ? rankings.indexOf(currentUser.uid) : -1;
 
             if (myPlayerRank !== -1) {
-                myHandContainer.innerHTML = `<div class="text-center text-3xl font-bold py-12 text-yellow-300">あなたは ${getRankName(myPlayerRank, (players?.length || 0) + (rankings?.length || 0))} です！</div>`;
+                const totalPlayers = (players?.length || 0) + (rankings?.length || 0);
+                myHandContainer.innerHTML = `<div class="text-center text-3xl font-bold py-12 text-yellow-300">あなたは ${getRankName(myPlayerRank, totalPlayers)} です！</div>`;
             } else {
                 myHandContainer.innerHTML = '';
                 const myHand = (hands && currentUser && hands[currentUser.uid]) ? hands[currentUser.uid] : [];
@@ -1157,18 +1158,20 @@
         }
 
         function showGameOverUI(gameState) {
-            if (!gameState || !gameState.rankings) return;
+            if (!gameState || !gameState.rankings || !gameState.players) return;
             gameOverModal.classList.remove('hidden');
             const rankingsList = document.getElementById('rankings-list');
             rankingsList.innerHTML = '';
             
-            const finalPlayers = [...(gameState.players || []), ...(localGameState.players || [])];
-            const allPlayers = [...new Map(finalPlayers.map(p => [p.id, p])).values()];
-            
-            const totalPlayersInGame = allPlayers.length;
+            const totalPlayersInGame = (localGameState.players?.length || 0) + (localGameState.rankings?.length || 0);
 
-            gameState.rankings.forEach((playerId, index) => {
-                const player = allPlayers.find(p => p.id === playerId);
+            const finalRankedPlayers = [...gameState.rankings];
+            const remainingPlayers = (gameState.players || []).filter(p => !finalRankedPlayers.includes(p.id));
+            remainingPlayers.sort((a,b) => a.cardCount - b.cardCount);
+            finalRankedPlayers.push(...remainingPlayers.map(p=>p.id));
+
+            finalRankedPlayers.forEach((playerId, index) => {
+                const player = (localGameState.players || []).concat(gameState.players).find(p => p.id === playerId);
                 if(!player) return;
                 const li = document.createElement('div');
                 li.className = "flex justify-between items-center p-2 bg-white/10 rounded";
@@ -1464,8 +1467,30 @@
         }
 
         async function prepareNextGame() {
-            gameOverModal.classList.add('hidden');
-            await startGame();
+            if (!currentRoomId) return;
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+
+            try {
+                const roomDoc = await getDoc(roomRef);
+                if (!roomDoc.exists()) return;
+
+                const currentPlayers = roomDoc.data().players;
+                // 順位情報を保持したままプレイヤーリストを再構築
+                const updatedPlayers = currentPlayers.map((p, index) => ({
+                    ...p,
+                    rank: localGameState.rankings.indexOf(p.id) + 1, // ランクを保存
+                    cardCount: 0
+                }));
+
+                await updateDoc(roomRef, {
+                    gameState: { status: 'waiting' },
+                    players: updatedPlayers
+                });
+
+            } catch (error) {
+                console.error("次のゲームの準備中にエラー:", error);
+                showMessage("エラーが発生しました。");
+            }
         }
 
         function promptJokerSuit() {
