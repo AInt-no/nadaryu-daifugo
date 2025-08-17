@@ -323,6 +323,20 @@
                 </div>
             </div>
         </div>
+        <div id="spade3-modal" class="hidden modal-overlay">
+            <div class="modal-content bg-gray-800 text-white w-full max-w-md">
+                <h2 class="text-2xl font-bold mb-2">スペ3返し</h2>
+                <p class="mb-6">ジョーカーをスペードの3で返しました。他のプレイヤーのドボン宣言を待っています...</p>
+                <button id="confirm-spade3-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">OK (場を流す)</button>
+            </div>
+        </div>
+        <div id="agari-modal" class="hidden modal-overlay">
+            <div class="modal-content bg-gray-800 text-white w-full max-w-md">
+                <h2 class="text-3xl font-bold mb-4 text-yellow-300">あがり！</h2>
+                <p class="mb-6">おめでとうございます！</p>
+                <button id="confirm-agari-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">OK (次へ)</button>
+            </div>
+        </div>
     </div>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
@@ -368,6 +382,8 @@
         const receivedCardsModal = document.getElementById('received-cards-modal');
         const dobonSuccessModal = document.getElementById('dobon-success-modal');
         const jokerSuitModal = document.getElementById('joker-suit-modal');
+        const spade3Modal = document.getElementById('spade3-modal');
+        const agariModal = document.getElementById('agari-modal');
         const leaveGameBtn = document.getElementById('leave-game-btn');
 
         onAuthStateChanged(auth, async (user) => {
@@ -567,29 +583,29 @@
         }
 
         async function handleNextGameClick() {
-            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
-            const isHost = currentUser.uid === currentHostId;
-
-            // 自分の画面だけ先にロビーに遷移
             gameOverModal.classList.add('hidden');
             showScreen(lobbyScreen);
+
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            const hostId = currentHostId;
+            const userId = currentUser.uid;
             
-            // サーバーに次のゲームの準備ができたことを通知
             try {
                 await runTransaction(db, async (transaction) => {
                     const roomDoc = await transaction.get(roomRef);
                     if (!roomDoc.exists()) return;
+                    
                     let roomData = roomDoc.data();
                     let players = roomData.players;
-
-                    const me = players.find(p => p.id === currentUser.uid);
-                    if(me) me.view = 'lobby';
+                    const me = players.find(p => p.id === userId);
+                    if (me) {
+                        me.view = 'lobby';
+                    }
 
                     const allInLobby = players.every(p => p.view === 'lobby');
 
-                    if (allInLobby && isHost) {
-                        // ホストが最後に押した場合、全員の状態をリセットして次のゲームへ
-                        const updatedPlayers = players.map(p => {
+                    if (allInLobby && userId === hostId) {
+                         const updatedPlayers = players.map(p => {
                             const rank = roomData.lastGameResult?.rankings?.indexOf(p.id);
                             return { ...p, rank: rank !== -1 ? rank + 1 : null };
                         });
@@ -599,12 +615,11 @@
                             lastGameResult: deleteField()
                         });
                     } else {
-                        // まだ全員が準備できていない場合は自分の状態のみ更新
-                        transaction.update(roomRef, { players });
+                        transaction.update(roomRef, { players: players });
                     }
                 });
-            } catch(error) {
-                console.error("次のゲームへの移行エラー", error);
+            } catch (error) {
+                console.error("次のゲームへのリクエストエラー:", error);
             }
         }
 
@@ -728,85 +743,74 @@
                             throw new Error("反則あがりです！ジョーカーや最強のカード(2または3)ではあがれません。");
                         }
                     }
-
+                    
                     const newHand = hands[currentUser.uid].filter(card => !cardsToPlay.find(sc => sc.id === card.id));
                     const playedCardNumber = (cardsToPlay.find(c => c.suit !== 'JOKER') || cardsToPlay[0]).number;
                     const playedCardCount = cardsToPlay.length;
                     const player = gameState.players.find(p => p.id === currentUser.uid);
 
                     let playerHasFinished = false;
-                    
-                    if (playedCardNumber === 7 && newHand.length > 0 && newHand.length <= playedCardCount) {
+                    const playIsSpade3OnJoker = field.cards.length === 1 && field.cards[0].suit === 'JOKER' && cardsToPlay.length === 1 && cardsToPlay[0].number === 3 && cardsToPlay[0].suit === 'S';
+
+                    if ((playedCardNumber === 7 && newHand.length > 0 && newHand.length <= playedCardCount) ||
+                        (playedCardNumber === 10 && newHand.length > 0 && newHand.length <= playedCardCount)) {
                         playerHasFinished = true;
-                        const nextPlayerId = getNextPlayerId(gameState);
-                        if(gameState.hands[nextPlayerId]) {
-                            gameState.hands[nextPlayerId].push(...newHand);
-                            gameState.hands[nextPlayerId].sort((a,b)=>getCardStrength(a, gameState.isRevolution, gameState.isElevenBack));
+                        if(playedCardNumber === 7) {
+                            const nextPlayerId = getNextPlayerId(gameState);
+                            if(gameState.hands[nextPlayerId]) {
+                                gameState.hands[nextPlayerId].push(...newHand);
+                                gameState.hands[nextPlayerId].sort((a,b)=>getCardStrength(a, gameState.isRevolution, gameState.isElevenBack));
+                            }
+                            gameState.log.push(`${player.name}さんが7渡しで手札を全て渡し、あがりました！`);
+                        } else {
+                             gameState.log.push(`${player.name}さんが10捨てで手札を全て捨て、あがりました！`);
                         }
                         gameState.hands[currentUser.uid] = [];
-                        gameState.log.push(`${player.name}さんが7渡しで手札を全て渡し、あがりました！`);
-                    } else if (playedCardNumber === 10 && newHand.length > 0 && newHand.length <= playedCardCount) {
-                        playerHasFinished = true;
-                        gameState.hands[currentUser.uid] = [];
-                        gameState.log.push(`${player.name}さんが10捨てで手札を全て捨て、あがりました！`);
                     } else if (newHand.length === 0) {
                         playerHasFinished = true;
                         gameState.log.push(`${player.name}さんがあがりました！`);
                     }
 
                     if(playerHasFinished) {
+                        gameState.status = 'awaiting_agari_acknowledgement';
+                        gameState.pendingAction = { type: 'agari', playerId: currentUser.uid };
+                        gameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
                         gameState.rankings.push(currentUser.uid);
                         gameState.hands[currentUser.uid] = [];
                     } else {
                         gameState.hands[currentUser.uid] = newHand;
+                        if (playIsSpade3OnJoker) {
+                            gameState.status = 'awaiting_spade3_confirmation';
+                            gameState.pendingAction = { type: 'spade3', playerId: currentUser.uid };
+                            gameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                        } else if (playedCardNumber === 8) {
+                            gameState.status = 'awaiting_8giri_confirmation';
+                            gameState.pendingAction = { type: '8-giri', playerId: currentUser.uid };
+                            gameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                        } else if (playedCardNumber === 5) {
+                            gameState.status = 'awaiting_5skip_confirmation';
+                            gameState.pendingAction = { type: '5-skip', playerId: currentUser.uid, count: playedCardCount };
+                            gameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                        } else if (playedCardNumber === 7 || playedCardNumber === 10) {
+                            gameState.status = 'awaiting_selection';
+                            gameState.pendingAction = { type: playedCardNumber === 7 ? '7-pass' : '10-discard', playerId: currentUser.uid, count: playedCardCount };
+                            gameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                        } else {
+                            const effectResult = handleSpecialCards(cardsToPlay, gameState);
+                            gameState = effectResult.newGameState;
+                            gameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                            if (!effectResult.skipTurn) {
+                                gameState.currentPlayerId = getNextPlayerId(gameState);
+                            }
+                        }
+                        gameState.passCount = 0;
                     }
                     
                     gameState.players = gameState.players.map(p => ({...p, cardCount: gameState.hands[p.id]?.length || 0 }));
-                    
-                    if (playerHasFinished) {
-                        gameState.field = { cards: [], lastPlayerId: null, suitLock: null };
-                        gameState.passCount = 0;
-                        gameState.currentPlayerId = getNextPlayerId(gameState);
-                        gameState.log.push("場が流れます。");
-                        if (gameState.isElevenBack) {
-                            gameState.isElevenBack = false;
-                            gameState.log.push("イレブンバックの効果が切れました。");
-                        }
-                    } else if (playedCardNumber === 8) {
-                        gameState.status = 'awaiting_8giri_confirmation';
-                        gameState.pendingAction = { type: '8-giri', playerId: currentUser.uid };
-                        gameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
-                        gameState.passCount = 0;
-                    } else if (playedCardNumber === 5) {
-                        gameState.status = 'awaiting_5skip_confirmation';
-                        gameState.pendingAction = { type: '5-skip', playerId: currentUser.uid, count: playedCardCount };
-                        gameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
-                        gameState.passCount = 0;
-                    } else if (playedCardNumber === 7 || playedCardNumber === 10) {
-                        gameState.status = 'awaiting_selection';
-                        gameState.pendingAction = {
-                            type: playedCardNumber === 7 ? '7-pass' : '10-discard',
-                            playerId: currentUser.uid,
-                            count: playedCardCount
-                        };
-                        gameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
-                        gameState.passCount = 0;
-                        gameState.log.push(`${player.name}さんが${playedCardNumber}を${playedCardCount}枚出しました。`);
-                    } else {
-                        const effectResult = handleSpecialCards(cardsToPlay, gameState);
-                        gameState = effectResult.newGameState;
-                        
-                        gameState.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
-                        gameState.passCount = 0;
-                        if (!effectResult.skipTurn) {
-                            gameState.currentPlayerId = getNextPlayerId(gameState);
-                        }
-                    }
-                    
                     gameState.lastActionTimestamp = new Date();
                     
                     const activePlayersCount = gameState.players.filter(p => !gameState.rankings.includes(p.id)).length;
-                    if (activePlayersCount <= 1) {
+                    if (activePlayersCount <= 1 && !playerHasFinished) { // あがりの時は確認後に判定
                         const lastPlayer = gameState.players.find(p => !gameState.rankings.includes(p.id));
                         if(lastPlayer && !gameState.rankings.includes(lastPlayer.id)) {
                             gameState.rankings.push(lastPlayer.id);
@@ -847,13 +851,8 @@
 
                     if (gameState.passCount >= activePlayersCount - 1 && gameState.field.lastPlayerId) {
                         gameState.currentPlayerId = gameState.field.lastPlayerId;
-                        gameState.field = { cards: [], lastPlayerId: null, suitLock: null };
-                        gameState.passCount = 0;
+                        clearFieldAndReset(gameState);
                         gameState.log.push("場が流れました。");
-                        if (gameState.isElevenBack) {
-                            gameState.isElevenBack = false;
-                            gameState.log.push("イレブンバックの効果が切れました。");
-                        }
                     } else {
                         gameState.currentPlayerId = getNextPlayerId(gameState);
                     }
@@ -1051,6 +1050,7 @@
                             dobonSuccessModal.classList.add('hidden');
                             eightGiriModal.classList.add('hidden');
                             fiveSkipModal.classList.add('hidden');
+                            agariModal.classList.add('hidden');
                             if(selectionModal.classList.contains('hidden')) {
                                  showScreen(gameScreen);
                                  updateGameUI(localGameState);
@@ -1075,6 +1075,20 @@
                             updateGameUI(localGameState);
                              if (localGameState.pendingAction?.playerId === currentUser.uid) {
                                 fiveSkipModal.classList.remove('hidden');
+                            }
+                            break;
+                        case 'awaiting_spade3_confirmation':
+                            showScreen(gameScreen);
+                            updateGameUI(localGameState);
+                             if (localGameState.pendingAction?.playerId === currentUser.uid) {
+                                spade3Modal.classList.remove('hidden');
+                            }
+                            break;
+                        case 'awaiting_agari_acknowledgement':
+                            showScreen(gameScreen);
+                            updateGameUI(localGameState);
+                             if (localGameState.pendingAction?.playerId === currentUser.uid) {
+                                agariModal.classList.remove('hidden');
                             }
                             break;
                         case 'awaiting_dobon_acknowledgement':
@@ -1374,8 +1388,7 @@
                         return;
                     }
                     
-                    gameState.field = { cards: [], lastPlayerId: null, suitLock: null };
-                    gameState.passCount = 0;
+                    clearFieldAndReset(gameState);
                     gameState.currentPlayerId = currentUser.uid;
                     gameState.log.push("8切りで場が流れました。");
                     
@@ -1407,7 +1420,7 @@
                     const activePlayersCount = gameState.players.filter(p => !gameState.rankings.includes(p.id)).length;
                     
                     if (skips >= activePlayersCount - 1) {
-                        gameState.field = { cards: [], lastPlayerId: null, suitLock: null };
+                        clearFieldAndReset(gameState);
                         gameState.currentPlayerId = currentUser.uid;
                         gameState.log.push(`5で他の全員がスキップされ、場が流れました。`);
                     } else {
@@ -1469,7 +1482,7 @@
                     if (gameState.status !== 'awaiting_dobon_acknowledgement') return;
 
                     gameState.currentPlayerId = gameState.dobonInfo.nextPlayerId;
-                    gameState.field = { cards: [], lastPlayerId: null, suitLock: null };
+                    clearFieldAndReset(gameState);
                     gameState.log.push("場が流れます。");
                     delete gameState.dobonInfo;
 
@@ -1489,6 +1502,69 @@
             } catch(error) {
                 console.error("ドボン後の再開エラー:", error);
                 showMessage(error.message);
+            }
+        }
+        
+        async function resumeAfterAgari() {
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const roomDoc = await transaction.get(roomRef);
+                    if (!roomDoc.exists()) return;
+                    let gameState = roomDoc.data().gameState;
+
+                    if (gameState.status !== 'awaiting_agari_acknowledgement' || gameState.pendingAction?.playerId !== currentUser.uid) {
+                        return;
+                    }
+                    
+                    clearFieldAndReset(gameState);
+                    gameState.currentPlayerId = getNextPlayerId(gameState);
+                    
+                    const activePlayersCount = gameState.players.filter(p => !gameState.rankings.includes(p.id)).length;
+                    if (activePlayersCount <= 1) {
+                         const lastPlayer = gameState.players.find(p => !gameState.rankings.includes(p.id));
+                        if(lastPlayer && !gameState.rankings.includes(lastPlayer.id)) {
+                            gameState.rankings.push(lastPlayer.id);
+                        }
+                        gameState.status = 'finished';
+                    } else {
+                        gameState.status = 'playing';
+                    }
+
+                    delete gameState.pendingAction;
+                    transaction.update(roomRef, { gameState });
+                });
+                agariModal.classList.add('hidden');
+            } catch (error) {
+                 console.error("あがり後再開エラー:", error);
+                 showMessage(error.message);
+            }
+        }
+
+        async function resolveSpade3() {
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const roomDoc = await transaction.get(roomRef);
+                    if (!roomDoc.exists()) throw new Error("ルームが見つかりません。");
+                    let gameState = roomDoc.data().gameState;
+
+                    if (gameState.status !== 'awaiting_spade3_confirmation' || gameState.pendingAction?.playerId !== currentUser.uid) {
+                        return;
+                    }
+                    
+                    clearFieldAndReset(gameState);
+                    gameState.currentPlayerId = currentUser.uid;
+                    gameState.log.push("スペ3返しで場が流れました。");
+                    
+                    gameState.status = 'playing';
+                    delete gameState.pendingAction;
+                    transaction.update(roomRef, { gameState });
+                });
+                spade3Modal.classList.add('hidden');
+            } catch (error) {
+                 console.error("スペ3解決エラー:", error);
+                 showMessage(error.message);
             }
         }
 
@@ -1522,13 +1598,15 @@
         document.getElementById('play-card-btn').addEventListener('click', playCards);
         document.getElementById('pass-btn').addEventListener('click', passTurn);
         document.getElementById('dobon-btn').addEventListener('click', declareDobon);
-        document.getElementById('next-game-btn').addEventListener('click', handleNextGameClick);
+        document.getElementById('next-game-btn').addEventListener('click', requestReturnToLobby);
         document.getElementById('leave-room-btn').addEventListener('click', confirmAndLeave);
         leaveGameBtn.addEventListener('click', confirmAndLeave);
         
         document.getElementById('confirm-selection-btn').addEventListener('click', confirmSelection);
         document.getElementById('confirm-8giri-btn').addEventListener('click', resolve8giri);
         document.getElementById('confirm-5skip-btn').addEventListener('click', resolve5skip);
+        document.getElementById('confirm-spade3-btn').addEventListener('click', resolveSpade3);
+        document.getElementById('confirm-agari-btn').addEventListener('click', resumeAfterAgari);
         document.getElementById('received-cards-ok-btn').addEventListener('click', () => {
             receivedCardsModal.classList.add('hidden');
         });
