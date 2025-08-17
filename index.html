@@ -567,29 +567,29 @@
         }
 
         async function handleNextGameClick() {
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            const isHost = currentUser.uid === currentHostId;
+
+            // 自分の画面だけ先にロビーに遷移
             gameOverModal.classList.add('hidden');
             showScreen(lobbyScreen);
-
-            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
-            const hostId = currentHostId;
-            const userId = currentUser.uid;
             
+            // サーバーに次のゲームの準備ができたことを通知
             try {
                 await runTransaction(db, async (transaction) => {
                     const roomDoc = await transaction.get(roomRef);
                     if (!roomDoc.exists()) return;
-                    
                     let roomData = roomDoc.data();
                     let players = roomData.players;
-                    const me = players.find(p => p.id === userId);
-                    if (me) {
-                        me.view = 'lobby';
-                    }
+
+                    const me = players.find(p => p.id === currentUser.uid);
+                    if(me) me.view = 'lobby';
 
                     const allInLobby = players.every(p => p.view === 'lobby');
 
-                    if (allInLobby && userId === hostId) {
-                         const updatedPlayers = players.map(p => {
+                    if (allInLobby && isHost) {
+                        // ホストが最後に押した場合、全員の状態をリセットして次のゲームへ
+                        const updatedPlayers = players.map(p => {
                             const rank = roomData.lastGameResult?.rankings?.indexOf(p.id);
                             return { ...p, rank: rank !== -1 ? rank + 1 : null };
                         });
@@ -599,11 +599,12 @@
                             lastGameResult: deleteField()
                         });
                     } else {
-                        transaction.update(roomRef, { players: players });
+                        // まだ全員が準備できていない場合は自分の状態のみ更新
+                        transaction.update(roomRef, { players });
                     }
                 });
-            } catch (error) {
-                console.error("次のゲームへのリクエストエラー:", error);
+            } catch(error) {
+                console.error("次のゲームへの移行エラー", error);
             }
         }
 
@@ -744,6 +745,10 @@
                         }
                         gameState.hands[currentUser.uid] = [];
                         gameState.log.push(`${player.name}さんが7渡しで手札を全て渡し、あがりました！`);
+                    } else if (playedCardNumber === 10 && newHand.length > 0 && newHand.length <= playedCardCount) {
+                        playerHasFinished = true;
+                        gameState.hands[currentUser.uid] = [];
+                        gameState.log.push(`${player.name}さんが10捨てで手札を全て捨て、あがりました！`);
                     } else if (newHand.length === 0) {
                         playerHasFinished = true;
                         gameState.log.push(`${player.name}さんがあがりました！`);
@@ -763,6 +768,10 @@
                         gameState.passCount = 0;
                         gameState.currentPlayerId = getNextPlayerId(gameState);
                         gameState.log.push("場が流れます。");
+                        if (gameState.isElevenBack) {
+                            gameState.isElevenBack = false;
+                            gameState.log.push("イレブンバックの効果が切れました。");
+                        }
                     } else if (playedCardNumber === 8) {
                         gameState.status = 'awaiting_8giri_confirmation';
                         gameState.pendingAction = { type: '8-giri', playerId: currentUser.uid };
@@ -865,7 +874,8 @@
                     const roomDoc = await transaction.get(roomRef);
                     if (!roomDoc.exists()) throw new Error("ルームデータが見つかりません。");
                     
-                    let gameState = roomDoc.data().gameState;
+                    let roomData = roomDoc.data();
+                    let gameState = roomData.gameState;
                     const { hands, field } = gameState;
                     const myHand = hands[currentUser.uid];
             
@@ -912,9 +922,9 @@
             const cardCount = playedCards.length;
             
             const isFourCardRevolution = (cardCount === 4 && uniqueNumbers.length <= 1);
-            const isThreeThreesRevolution = (cardCount === 3 && nonJokers.length === 3 && cardNum === 3);
+            const isThreeCardThreeRevolution = (cardCount === 3 && uniqueNumbers.length === 1 && uniqueNumbers[0] === 3);
 
-            if (isFourCardRevolution || isThreeThreesRevolution) {
+            if (isFourCardRevolution || isThreeCardThreeRevolution) {
                 gameState.isRevolution = !gameState.isRevolution;
                 gameState.log.push(`${player.name}さんが革命を起こしました！`);
             }
@@ -1020,6 +1030,7 @@
                 
                 localRoomData = doc.data();
                 localGameState = localRoomData.gameState || {};
+                currentHostId = localRoomData.hostId;
                 leaveGameBtn.classList.remove('hidden');
                 
                 processLastEvent(localGameState);
