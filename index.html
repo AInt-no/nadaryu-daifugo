@@ -547,8 +547,11 @@
             leaveGameBtn.classList.add('hidden');
         }
 
+        // 【修正】 退出関数を追加
         function confirmAndLeave() {
-            if (confirm("ルームから退出しますか？")) handleLeaveGame();
+            if (confirm("本当にルームから退出しますか？")) {
+                handleLeaveGame();
+            }
         }
 
         async function handleLeaveGame() {
@@ -721,8 +724,6 @@
                     
                     // 7渡し/10捨てであがる場合、即あがり扱いだがカード移動処理はスキップ
                     if ((playedNum === 7 || playedNum === 10) && newHand.length > 0 && newHand.length <= count) {
-                        // 全捨てであがり
-                        // 実装簡略化のため、残り手札を消滅させてあがりとする（本来は渡す/捨てるだが、結果は同じ）
                         finished = true;
                         gs.hands[currentUser.uid] = [];
                     }
@@ -761,7 +762,7 @@
                     gs.players = gs.players.map(p => ({...p, cardCount: gs.hands[p.id]?.length || 0 }));
                     gs.lastActionTimestamp = new Date().toISOString();
 
-                    // ゲーム終了判定 (残り1人になったら)
+                    // ゲーム終了判定
                     const active = gs.players.filter(p => !gs.rankings.includes(p.id));
                     if (active.length <= 1 && !finished) { // あがり待機中は除外
                          const last = active[0];
@@ -833,8 +834,7 @@
                         playerHand: myHand,
                         fieldCards: field,
                         sum: handSum,
-                        nextPlayerId: getNextPlayerId(gs) // 親権はドボンした人ではない（ルール上不明確だが、通常はドボンした人が上がりで、次の人が親かドボンした人の次から）
-                        // Rev.3では「即座にあがり」。次の親は通常あがりのルールに従う。ここではドボンした人の次の人を仮の親とする。
+                        nextPlayerId: getNextPlayerId(gs)
                     };
                     transaction.update(roomRef, { gameState: gs });
                 });
@@ -843,15 +843,14 @@
 
         // --- Special Card Handlers ---
         function handleSpecialCards(played, gs) {
-            const player = gs.players.find(p => p.id === gs.currentPlayerId);
             const nonJokers = played.filter(c => c.suit !== 'JOKER');
             const nums = [...new Set(nonJokers.map(c => c.number))];
-            const mainNum = nums[0] || played[0].number; // All Jokers case -> take Joker's temp number if needed, or logic handles it.
+            const mainNum = nums[0] || played[0].number;
             const count = played.length;
 
-            // 革命 (4枚出し / 3を3枚) ルール 第7章
+            // 革命 (4枚出し / 3を3枚)
             const isRev4 = (count === 4);
-            const isRev3 = (count === 3 && mainNum === 3 && nonJokers.length > 0); // 3の3枚
+            const isRev3 = (count === 3 && mainNum === 3 && nonJokers.length > 0);
             
             if (isRev4 || isRev3) {
                 gs.isRevolution = !gs.isRevolution;
@@ -859,7 +858,7 @@
 
             // イレブンバック (11奇数枚)
             if (mainNum === 11 && count % 2 !== 0) {
-                gs.isElevenBack = !gs.isElevenBack; // トグルではなく「その場限り」だが、実装上はフラグを立てて場が流れる時に戻す
+                gs.isElevenBack = !gs.isElevenBack;
             }
 
             return { newGameState: gs, skipTurn: false };
@@ -869,7 +868,6 @@
         function clearFieldAndReset(gameState) {
             gameState.field = { cards: [], lastPlayerId: null, suitLock: null };
             gameState.passCount = 0;
-            // ルール 第7章: イレブンバックは場が流れたら終了
             if (gameState.isElevenBack) gameState.isElevenBack = false;
         }
 
@@ -881,7 +879,7 @@
             if (s === 2) s = 15;
             if (rev) {
                 if (s === 3) return 16; // 革命時は3が最強
-                return 15 - (s - 3); // 反転ロジック
+                return 15 - (s - 3);
             }
             return s;
         }
@@ -893,12 +891,10 @@
             const playIsSpade3 = played.length === 1 && played[0].suit === 'S' && played[0].number === 3;
             const fieldIsJoker = field.cards.length === 1 && field.cards[0].suit === 'JOKER';
 
-            // 複数枚出しの数字チェック
             const nums = played.map(c => c.suit==='JOKER' ? null : c.number).filter(n => n !== null);
             if ([...new Set(nums)].length > 1) return { valid: false, message: "同じ数字のみ出せます" };
-            // 階段禁止 (ルール 第5章) -> 上記チェックで弾かれるのでOK
 
-            // スペ3 vs Joker (ルール 第3章) - 革命中でも有効
+            // スペ3 vs Joker
             if (fieldIsJoker && playIsSpade3) return { valid: true, newSuitLock: null };
 
             if (field.cards.length > 0) {
@@ -909,14 +905,13 @@
 
                 if (pStr <= fStr) return { valid: false, message: "弱いカードは出せません" };
 
-                // 縛り判定 (ルール 第9章)
+                // 縛り判定
                 if (field.suitLock) {
                     const pSuits = getCombinedSuits(played);
                     if (pSuits !== field.suitLock) return { valid: false, message: `縛り！[${field.suitLock}]のみ可` };
                 }
             }
 
-            // 新たな縛り発生判定
             let newLock = null;
             if (field.cards.length > 0) {
                 const fSuits = getCombinedSuits(field.cards);
@@ -928,7 +923,6 @@
         }
 
         function getCombinedSuits(cards) {
-            // ジョーカーが含まれる場合、designatedSuitを使用する
             const suits = cards.map(c => c.designatedSuit || c.suit).filter(s => s !== 'JOKER');
             return [...new Set(suits)].sort().join('');
         }
@@ -954,18 +948,20 @@
             });
         }
 
-        // --- Action Resolution ---
+        // 【修正】 次のゲームへボタンの処理（ロジック修正・変数名競合解消）
         async function handleNextGameClick() {
             gameOverModal.classList.add('hidden');
             showScreen(lobbyScreen);
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            
             try {
                 await runTransaction(db, async (t) => {
-                    const doc = await t.get(roomRef);
-                    if(!doc.exists()) return;
-                    const d = doc.data();
+                    // 'doc'という変数名を 'roomDoc' に変更して競合回避
+                    const roomDoc = await t.get(roomRef);
+                    if(!roomDoc.exists()) return;
+                    const d = roomDoc.data();
                     
-                    // 順位を保存してロビー待機状態へ
+                    // 自分のステータスを 'lobby' に更新
                     const pl = d.players.map(p => {
                          const r = d.lastGameResult?.rankings?.indexOf(p.id);
                          return (p.id === currentUser.uid) 
@@ -973,8 +969,8 @@
                             : p;
                     });
                     
-                    // ホストのみがデータをクリーンアップ
-                    if(currentUser.uid === currentHostId && pl.every(p => p.view === 'lobby')) {
+                    // 全員がロビーに戻っていれば、誰であってもデータをクリアする
+                    if(pl.every(p => p.view === 'lobby')) {
                         t.update(roomRef, { players: pl, gameState: deleteField(), lastGameResult: deleteField() });
                     } else {
                         t.update(roomRef, { players: pl });
@@ -988,40 +984,37 @@
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             try {
                 await runTransaction(db, async (t) => {
-                    const doc = await t.get(roomRef);
-                    let gs = doc.data().gameState;
+                    const roomDoc = await t.get(roomRef);
+                    let gs = roomDoc.data().gameState;
                     if (gs.status !== statusCheck || gs.pendingAction?.playerId !== currentUser.uid) return;
 
                     if (statusCheck === 'awaiting_5skip_confirmation') {
-                         // 5スキップ処理 (ルール 第8章)
-                         const skips = (2 * gs.pendingAction.count) - 1; // スキップ人数計算
+                         const skips = (2 * gs.pendingAction.count) - 1;
                          const active = gs.players.filter(p => !gs.rankings.includes(p.id)).length;
                          if (skips >= active - 1) {
                              clearFieldAndReset(gs);
-                             gs.currentPlayerId = currentUser.uid; // 自分に戻る
+                             gs.currentPlayerId = currentUser.uid;
                          } else {
                              let target = currentUser.uid;
                              for(let i=0; i<=skips; i++) target = getNextPlayerId({...gs, currentPlayerId: target});
                              gs.currentPlayerId = target;
                          }
                     } else {
-                        // 8切り、スペ3、あがり -> 場を流す
                         clearFieldAndReset(gs);
                         if (statusCheck === 'awaiting_agari_acknowledgement') {
                              gs.currentPlayerId = getNextPlayerId(gs);
                         } else {
-                             gs.currentPlayerId = currentUser.uid; // 8切り/スペ3は俺のターン
+                             gs.currentPlayerId = currentUser.uid;
                         }
                     }
                     
                     gs.status = 'playing';
                     delete gs.pendingAction;
 
-                    // 残り人数チェック
                     const active = gs.players.filter(p => !gs.rankings.includes(p.id));
                     if (active.length <= 1) {
                         if(active[0]) gs.rankings.push(active[0].id);
-                        finishGame(t, roomRef, doc.data(), gs.rankings);
+                        finishGame(t, roomRef, roomDoc.data(), gs.rankings);
                     } else {
                         t.update(roomRef, { gameState: gs });
                     }
@@ -1035,8 +1028,8 @@
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             try {
                 await runTransaction(db, async (t) => {
-                    const doc = await t.get(roomRef);
-                    let gs = doc.data().gameState;
+                    const roomDoc = await t.get(roomRef);
+                    let gs = roomDoc.data().gameState;
                     const action = gs.pendingAction;
                     
                     if (cardsForSelection.length !== action.count) throw new Error("枚数が不正です");
@@ -1047,7 +1040,7 @@
                     if (action.type === '7-pass') {
                         const nextId = getNextPlayerId(gs);
                         gs.hands[nextId].push(...cardsForSelection);
-                        gs.hands[nextId].sort((a,b) => getCardStrength(a) - getCardStrength(b)); // 簡易ソート
+                        gs.hands[nextId].sort((a,b) => getCardStrength(a) - getCardStrength(b));
                         gs.lastEvent = { type: '7-pass', recipientId: nextId, senderName: gs.players.find(p=>p.id===currentUser.uid).name, cards: cardsForSelection, timestamp: Date.now() };
                     }
 
@@ -1055,14 +1048,14 @@
                     gs.currentPlayerId = getNextPlayerId(gs);
                     delete gs.pendingAction;
                     
-                    // あがりチェック（全部渡した場合）
+                    // あがりチェック
                     if (gs.hands[currentUser.uid].length === 0 && !gs.rankings.includes(currentUser.uid)) {
                         gs.rankings.push(currentUser.uid);
                         const active = gs.players.filter(p => !gs.rankings.includes(p.id));
                         if (active.length <= 1) {
                             if(active[0]) gs.rankings.push(active[0].id);
-                            finishGame(t, roomRef, doc.data(), gs.rankings);
-                            return; // トランザクション終了
+                            finishGame(t, roomRef, roomDoc.data(), gs.rankings);
+                            return;
                         }
                     }
                     
@@ -1081,7 +1074,6 @@
                  let gs = d.gameState;
                  if (gs.status !== 'awaiting_dobon_acknowledgement') return;
                  
-                 // 次のプレイヤーへ
                  gs.currentPlayerId = gs.dobonInfo.nextPlayerId;
                  clearFieldAndReset(gs);
                  delete gs.dobonInfo;
@@ -1123,7 +1115,6 @@
                     updateLobbyUI(localRoomData);
                 }
                 
-                // 7渡し受け取り通知
                 if (localGameState.lastEvent && localGameState.lastEvent.recipientId === currentUser.uid && 
                     localGameState.lastEvent.timestamp !== acknowledgedEventTimestamp) {
                     acknowledgedEventTimestamp = localGameState.lastEvent.timestamp;
@@ -1154,7 +1145,6 @@
         function updateGameUI(gs, players) {
             showScreen(gameScreen);
             
-            // 1. 手札描画
             const handDiv = document.getElementById('my-hand');
             handDiv.innerHTML = '';
             const myHand = gs.hands[currentUser.uid] || [];
@@ -1172,19 +1162,16 @@
                 });
             }
 
-            // 2. フィールド描画
             const fieldDiv = document.getElementById('field');
             fieldDiv.innerHTML = '';
             (gs.field.cards||[]).forEach(c => fieldDiv.appendChild(createCardEl(c)));
             
-            // 3. 情報表示
             const infoDiv = document.getElementById('game-info');
             infoDiv.innerHTML = '';
             if (gs.isRevolution) infoDiv.innerHTML += '<span class="text-red-500 bg-white/20 px-2 rounded">革命中</span>';
             if (gs.isElevenBack) infoDiv.innerHTML += '<span class="text-blue-400 bg-white/20 px-2 rounded">イレブンバック</span>';
             if (gs.field.suitLock) infoDiv.innerHTML += `<span class="text-green-400 bg-white/20 px-2 rounded">縛り: ${gs.field.suitLock}</span>`;
 
-            // 4. 他プレイヤー
             const otherDiv = document.getElementById('other-players-container');
             otherDiv.innerHTML = '';
             const myIdx = players.findIndex(p => p.id === currentUser.uid);
@@ -1200,17 +1187,14 @@
                 otherDiv.appendChild(div);
             });
 
-            // 5. ボタン制御
             const isTurn = gs.currentPlayerId === currentUser.uid && !finished;
             const locked = gs.status.startsWith('awaiting');
             document.getElementById('play-card-btn').disabled = !isTurn || locked;
             document.getElementById('pass-btn').disabled = !isTurn || locked || (!gs.field.cards.length);
             
-            // ドボンボタン: 手番関係なし、手札2枚以上、場札あり、自分が最後でない
             const canDobon = !locked && !finished && myHand.length >= 2 && gs.field.cards.length > 0 && gs.field.lastPlayerId !== currentUser.uid;
             document.getElementById('dobon-btn').disabled = !canDobon;
 
-            // 6. モーダル制御
             if (gs.pendingAction?.playerId === currentUser.uid) {
                 if (gs.status === 'awaiting_selection') showSelectionModal(gs.pendingAction, myHand);
                 else if (gs.status === 'awaiting_8giri_confirmation') eightGiriModal.classList.remove('hidden');
@@ -1329,7 +1313,7 @@
         document.getElementById('pass-btn').addEventListener('click', passTurn);
         document.getElementById('dobon-btn').addEventListener('click', declareDobon);
         
-        document.getElementById('next-game-btn').addEventListener('click', handleNextGameClick); // 修正箇所
+        document.getElementById('next-game-btn').addEventListener('click', handleNextGameClick);
         document.getElementById('leave-room-btn').addEventListener('click', confirmAndLeave);
         leaveGameBtn.addEventListener('click', confirmAndLeave);
         
