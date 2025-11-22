@@ -6,103 +6,147 @@
     <title>灘流大富豪 (Rev.3)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap');
         body {
             font-family: 'M PLUS Rounded 1c', sans-serif;
-            background-color: #f0f2f5;
-            user-select: none; /* テキスト選択禁止（ゲーム操作性向上） */
+            background-color: #1e293b; /* 背景色を少しダークに */
+            user-select: none;
+            overscroll-behavior: none; /* スクロールバウンス防止 */
         }
+
+        /* --- カードデザイン (視認性向上版) --- */
         .card {
-            width: 80px;
-            height: 120px;
-            border: 1px solid #999;
-            border-radius: 8px;
+            width: 75px;
+            height: 110px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
             background-color: white;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 4px;
-            cursor: pointer;
-            transition: all 0.2s ease-in-out;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             position: relative;
             flex-shrink: 0;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+            box-shadow: 1px 1px 4px rgba(0,0,0,0.3);
+            overflow: hidden;
         }
-        .card.selected {
-            transform: translateY(-20px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
-            border-color: #3b82f6;
-            background-color: #eff6ff;
-        }
-        .card.joker {
-            background-color: #fde047;
-        }
-        .card .suit-top, .card .suit-bottom {
-            font-size: 1.2rem;
+
+        /* 左上のインデックス（重なっても見える部分） */
+        .card .corner-index {
+            position: absolute;
+            top: 2px;
+            left: 3px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 24px;
             line-height: 1;
         }
-        .card .suit-bottom {
+        .card .corner-index .num {
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+        }
+        .card .corner-index .suit {
+            font-size: 1.1rem;
+            margin-top: -2px;
+        }
+
+        /* 中央の装飾（雰囲気用、隠れても良い） */
+        .card .center-decoration {
+            position: absolute;
+            top: 55%;
+            left: 55%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            opacity: 0.15;
+            pointer-events: none;
+        }
+
+        /* 右下の逆さ文字 */
+        .card .bottom-index {
+            position: absolute;
+            bottom: 3px;
+            right: 3px;
             transform: rotate(180deg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            opacity: 0.8;
+            line-height: 1;
         }
-        .card .number {
-            font-size: 1.8rem;
-            font-weight: bold;
-            text-align: center;
+
+        /* 色定義 */
+        .card.red { color: #dc2626; }
+        .card.black { color: #1e293b; }
+        .card.joker { background-color: #fef08a; border-color: #facc15; }
+
+        /* 選択状態 */
+        .card.selected {
+            transform: translateY(-20px) scale(1.05);
+            box-shadow: 0 0 0 3px #3b82f6, 0 10px 15px rgba(0,0,0,0.3);
+            z-index: 100;
+            background-color: #eff6ff;
         }
-        .card.red { color: #ef4444; }
-        .card.black { color: #1f2937; }
-        
+
+        /* --- 手札コンテナ (スクロール対応) --- */
         .player-hand {
             display: flex;
-            justify-content: center;
+            justify-content: flex-start; /* 左詰めでスクロールさせる */
             align-items: center;
             flex-wrap: nowrap;
             overflow-x: auto;
-            overflow-y: hidden;
-            padding: 10px 40px 20px 40px;
-            min-height: 170px;
+            overflow-y: visible;
+            padding: 30px 20px 10px 20px;
+            min-height: 160px;
+            width: 100%;
+            -webkit-overflow-scrolling: touch;
+            mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent); /* 端をフェード */
         }
+        
         .player-hand .card {
-            margin-left: -45px; /* カードを重ねる */
+            margin-left: -48px; /* 重ねる幅を調整 */
+            box-shadow: -2px 0 5px rgba(0,0,0,0.15); /* 左側に影 */
         }
         .player-hand .card:first-child {
-            margin-left: 0;
+            margin-left: 5px;
         }
-        .player-hand .card:hover {
-            z-index: 10; /* ホバー時に手前に表示 */
-            transform: translateY(-10px);
-        }
-        .player-hand .card.selected {
-            z-index: 20;
-            transform: translateY(-25px);
+        .player-hand .card:last-child {
+            margin-right: 20px; /* 右端の余白 */
         }
 
+        /* --- フィールド --- */
         .field-cards {
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 140px;
-            gap: 8px;
+            min-height: 120px;
+            gap: 6px; /* フィールドは少し離す */
         }
+        .field-cards .card {
+            cursor: default;
+            transform: none !important;
+        }
+
+        /* --- プレイヤー情報 --- */
         .player-info {
             transition: all 0.3s ease;
-            transform: scale(1);
-            width: 7rem;
-            font-size: 0.85rem;
+            width: 5rem;
+            font-size: 0.8rem;
+            position: relative;
         }
         .player-info.current-turn {
-            box-shadow: 0 0 15px rgba(251, 191, 36, 0.8);
-            transform: scale(1.1);
-            border: 2px solid #fcd34d;
-            background-color: rgba(0,0,0,0.6);
+            z-index: 10;
         }
+        .player-info.current-turn .avatar {
+            box-shadow: 0 0 0 3px #facc15, 0 0 15px rgba(250, 204, 21, 0.5);
+            transform: scale(1.1);
+        }
+
+        /* --- モーダル --- */
         .modal-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(2px);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -112,246 +156,210 @@
             background-color: #1f2937;
             color: white;
             padding: 2rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
             text-align: center;
             max-width: 90%;
+            border: 1px solid #374151;
         }
         
-        .selection-hand, .card-display-area {
+        .selection-hand {
              display: flex;
              justify-content: center;
              flex-wrap: wrap;
              gap: 8px;
-             margin-top: 1rem;
-             margin-bottom: 1.5rem;
-             max-height: 320px;
-             overflow-y: auto;
+             margin: 1rem 0;
              padding: 1rem;
-             background-color: rgba(255,255,255,0.1);
+             background-color: rgba(255,255,255,0.05);
              border-radius: 8px;
         }
-        .designated-suit {
-            position: absolute;
-            top: 5px;
-            right: 8px;
-            font-size: 1rem;
-            font-weight: bold;
-            opacity: 0.8;
-        }
-        .suit-button {
-            font-size: 2rem;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            border: 2px solid #ccc;
-            background-color: #fff;
-            margin: 0 10px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .suit-button:hover:not(:disabled) {
-            transform: scale(1.1);
-            border-color: #3b82f6;
-        }
-        .suit-button:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-            background-color: #e5e7eb;
-        }
 
+        .suit-button {
+            font-size: 2rem; width: 60px; height: 60px;
+            border-radius: 50%; border: 2px solid #4b5563;
+            background-color: white; margin: 0 5px;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.1s;
+        }
+        .suit-button:active { transform: scale(0.9); }
+
+        /* --- ボタン類 --- */
         #reload-btn {
-            position: fixed;
-            top: 15px;
-            right: 15px;
-            width: 40px;
-            height: 40px;
-            background-color: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            border-radius: 50%;
-            font-size: 1.2rem;
-            cursor: pointer;
-            z-index: 1100;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(5px);
+            position: fixed; top: 15px; right: 15px;
+            width: 40px; height: 40px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%; font-size: 1.2rem;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px); z-index: 1100;
         }
         #leave-game-btn {
-            position: fixed;
-            top: 15px;
-            left: 15px;
-            background-color: rgba(239, 68, 68, 0.8);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            border-radius: 8px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            cursor: pointer;
+            position: fixed; top: 15px; left: 15px;
+            background: rgba(239, 68, 68, 0.9);
+            padding: 6px 12px; border-radius: 8px;
+            font-size: 0.8rem; font-weight: bold;
             z-index: 1100;
-            padding: 8px 12px;
-            backdrop-filter: blur(5px);
         }
     </style>
 </head>
-<body class="bg-green-800 text-white h-screen overflow-hidden">
+<body class="text-white h-screen overflow-hidden">
 
     <div id="app" class="container mx-auto p-2 h-full flex flex-col relative">
 
-        <button id="reload-btn" onclick="location.reload()" title="ページを更新">🔄</button>
+        <button id="reload-btn" onclick="location.reload()" title="更新">🔄</button>
         <button id="leave-game-btn" class="hidden">退出</button>
 
         <div id="home-screen" class="flex flex-col items-center justify-center h-full">
-            <h1 class="text-5xl md:text-7xl font-bold mb-4 text-yellow-300 drop-shadow-lg">灘流大富豪</h1>
-            <p class="mb-8 text-lg opacity-80">Rev.3 (最終確定版)</p>
-            <div class="w-full max-w-md bg-white/10 p-8 rounded-xl shadow-2xl backdrop-blur-sm">
+            <h1 class="text-5xl md:text-7xl font-black mb-2 text-yellow-400 tracking-tighter drop-shadow-lg">灘流大富豪</h1>
+            <p class="mb-10 text-lg text-gray-400 font-bold">Rev.3 Complete</p>
+            <div class="w-full max-w-md bg-slate-800/50 p-8 rounded-2xl shadow-2xl border border-slate-700 backdrop-blur-md">
                 <div class="mb-6">
-                    <label for="player-name" class="block mb-2 text-sm font-bold">プレイヤー名</label>
-                    <input type="text" id="player-name" class="w-full px-4 py-3 rounded-lg text-gray-800 font-bold" placeholder="名前を入力" maxlength="8">
+                    <label class="block mb-2 text-sm font-bold text-gray-300">プレイヤー名</label>
+                    <input type="text" id="player-name" class="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-600 text-white font-bold focus:outline-none focus:border-yellow-400 transition" placeholder="名前を入力" maxlength="8">
                 </div>
-                <button id="create-room-btn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-3 px-4 rounded-lg text-xl transition duration-300 mb-4 shadow-md">ルームを作成する</button>
+                <button id="create-room-btn" class="w-full bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-black py-4 px-4 rounded-xl text-xl shadow-lg transform transition hover:-translate-y-1 mb-4">ルームを作成</button>
                 <div class="flex items-center gap-2">
-                    <input type="text" id="room-id-input" class="flex-1 px-4 py-3 rounded-lg text-gray-800 font-bold uppercase" placeholder="ルームID" maxlength="5">
-                    <button id="join-room-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 shadow-md whitespace-nowrap">参加</button>
+                    <input type="text" id="room-id-input" class="flex-1 px-4 py-3 rounded-xl bg-slate-900 border border-slate-600 text-white font-bold uppercase placeholder-gray-600" placeholder="ルームID" maxlength="5">
+                    <button id="join-room-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition">参加</button>
                 </div>
             </div>
         </div>
 
         <div id="lobby-screen" class="hidden flex flex-col items-center justify-center h-full">
-            <h2 class="text-3xl font-bold text-center mb-2">待機ルーム</h2>
-            <div class="text-center mb-8 bg-black/30 p-4 rounded-lg">
-                <p class="text-sm text-gray-300 mb-1">ルームID (タップしてコピー)</p>
-                <p id="room-id-display" class="font-mono text-4xl font-bold text-yellow-300 cursor-pointer select-all tracking-widest" onclick="copyRoomId()"></p>
+            <h2 class="text-2xl font-bold text-center mb-2 text-gray-300">待機ルーム</h2>
+            <div class="text-center mb-8 bg-slate-900/50 p-6 rounded-2xl border border-slate-700">
+                <p class="text-xs text-gray-400 mb-1 uppercase tracking-widest">Room ID</p>
+                <p id="room-id-display" class="font-mono text-5xl font-black text-yellow-400 cursor-pointer select-all tracking-widest" onclick="copyRoomId()"></p>
+                <p class="text-xs text-gray-500 mt-2">タップしてコピー</p>
             </div>
             
-            <div class="w-full max-w-lg bg-white/10 p-6 rounded-xl shadow-lg mb-8 flex-1 overflow-y-auto max-h-[40vh]">
-                <h3 class="text-xl font-bold mb-4 border-b border-white/20 pb-2">参加プレイヤー <span id="player-count" class="text-sm font-normal ml-2"></span></h3>
-                <ul id="player-list" class="space-y-3"></ul>
+            <div class="w-full max-w-md bg-slate-800/50 p-6 rounded-2xl shadow-lg mb-8 flex-1 overflow-y-auto max-h-[40vh] border border-slate-700">
+                <h3 class="text-lg font-bold mb-4 border-b border-slate-600 pb-2 flex justify-between">
+                    参加者 <span id="player-count" class="text-sm font-normal bg-slate-700 px-2 py-0.5 rounded">0</span>
+                </h3>
+                <ul id="player-list" class="space-y-2"></ul>
             </div>
             
-            <div class="text-center w-full max-w-lg">
-                <button id="start-game-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-8 rounded-xl text-2xl transition duration-300 shadow-lg disabled:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed">ゲーム開始</button>
-                <p class="mt-2 text-sm text-gray-400">※2人以上で開始可能</p>
+            <div class="w-full max-w-md">
+                <button id="start-game-btn" class="w-full bg-red-500 hover:bg-red-400 text-white font-black py-4 px-8 rounded-2xl text-2xl shadow-lg transform transition hover:scale-105 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed disabled:transform-none">GAME START</button>
+                <p class="mt-3 text-center text-xs text-gray-500">※2人以上で開始可能です</p>
             </div>
         </div>
 
         <div id="game-screen" class="hidden flex flex-col h-full justify-between pb-safe">
-            <div id="other-players-container" class="flex justify-around items-start pt-2 px-1"></div>
+            <div id="other-players-container" class="flex justify-around items-start pt-4 px-2 gap-2"></div>
 
-            <div class="flex-1 flex flex-col justify-center items-center my-2">
-                <div class="bg-green-900/60 w-full max-w-3xl rounded-xl p-4 border-2 border-yellow-400/30 shadow-inner min-h-[200px] flex flex-col relative">
-                    <div class="absolute top-2 left-0 right-0 text-center">
-                        <div id="game-info" class="text-sm font-bold h-6 flex justify-center gap-3"></div>
-                        <p class="text-xs text-gray-400 mt-1">場に出ているカード</p>
-                    </div>
+            <div class="flex-1 flex flex-col justify-center items-center my-2 relative">
+                <div class="w-full max-w-3xl p-4 flex flex-col items-center min-h-[220px]">
+                    <div id="game-info" class="flex gap-2 mb-4 min-h-[24px]"></div>
                     
-                    <div id="field" class="field-cards flex-1 mt-6"></div>
+                    <div id="field" class="field-cards"></div>
+                    
+                    <p class="text-xs text-slate-500 mt-2 font-bold tracking-widest uppercase">Field</p>
                 </div>
             </div>
 
-            <div class="bg-black/40 backdrop-blur-md pb-4 rounded-t-2xl border-t border-white/10">
-                <div id="action-buttons" class="flex justify-center items-center gap-3 py-2 min-h-[60px]">
-                    <button id="play-card-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg shadow-lg disabled:bg-gray-600 disabled:opacity-50 transition-transform active:scale-95">出す</button>
-                    <button id="pass-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg shadow-lg disabled:bg-gray-700 disabled:opacity-50 transition-transform active:scale-95">パス</button>
-                    <button id="dobon-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg disabled:bg-gray-700 disabled:opacity-30 transition-transform active:scale-95 border border-purple-400">ドボン！</button>
+            <div class="bg-slate-900/80 backdrop-blur-lg pb-6 pt-2 rounded-t-3xl border-t border-slate-700 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+                <div id="action-buttons" class="flex justify-center items-center gap-4 mb-2 min-h-[50px]">
+                    <button id="play-card-btn" class="bg-blue-500 hover:bg-blue-400 text-white font-bold py-3 px-8 rounded-xl shadow-lg disabled:bg-slate-700 disabled:text-slate-500 disabled:shadow-none transition active:scale-95">出す</button>
+                    <button id="pass-btn" class="bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none transition active:scale-95">パス</button>
+                    <button id="dobon-btn" class="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none transition active:scale-95 border border-purple-400/30">ドボン</button>
                 </div>
+                
                 <div id="my-hand" class="player-hand"></div>
             </div>
         </div>
 
         <div id="game-over-modal" class="hidden modal-overlay">
             <div class="modal-content w-full max-w-md">
-                <h2 id="game-over-title" class="text-3xl font-bold mb-4 text-yellow-300">ゲーム終了！</h2>
-                <div id="rankings-list" class="text-left space-y-2 mb-6 bg-black/20 p-4 rounded"></div>
-                <div class="flex justify-center gap-4">
-                    <button id="next-game-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg flex-1">次のゲームへ</button>
-                    <button id="leave-room-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg">退出</button>
+                <h2 id="game-over-title" class="text-4xl font-black mb-6 text-yellow-400">GAME SET</h2>
+                <div id="rankings-list" class="text-left space-y-2 mb-8 bg-slate-800 p-4 rounded-xl"></div>
+                <div class="flex justify-center gap-3">
+                    <button id="next-game-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-xl flex-1">次のゲームへ</button>
+                    <button id="leave-room-btn" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded-xl">退出</button>
                 </div>
             </div>
         </div>
 
         <div id="message-modal" class="hidden modal-overlay z-[2000]">
-            <div id="message-content" class="bg-gray-900 text-white px-6 py-4 rounded-lg shadow-xl font-bold border border-gray-600"></div>
+            <div id="message-content" class="bg-slate-800 text-white px-8 py-4 rounded-full shadow-2xl font-bold border border-slate-600 flex items-center gap-2"></div>
         </div>
 
         <div id="selection-modal" class="hidden modal-overlay">
             <div class="modal-content w-full max-w-2xl">
-                <h2 id="selection-title" class="text-2xl font-bold mb-2 text-yellow-300"></h2>
-                <p id="selection-description" class="mb-4 text-gray-300"></p>
-                <div id="selection-hand" class="selection-hand bg-white/5"></div>
-                <button id="confirm-selection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-8 rounded-lg disabled:bg-gray-600 mt-2">決定</button>
+                <h2 id="selection-title" class="text-2xl font-bold mb-2 text-yellow-400"></h2>
+                <p id="selection-description" class="mb-4 text-gray-400"></p>
+                <div id="selection-hand" class="selection-hand"></div>
+                <button id="confirm-selection-btn" class="bg-blue-500 hover:bg-blue-400 text-white font-bold py-3 px-10 rounded-xl disabled:bg-slate-700 mt-4">決定</button>
             </div>
         </div>
 
         <div id="8giri-modal" class="hidden modal-overlay">
-            <div class="modal-content max-w-sm">
-                <h2 class="text-3xl font-bold mb-2 text-red-400">8切り！</h2>
-                <p class="mb-6">場を流します。</p>
-                <button id="confirm-8giri-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg w-full">OK</button>
+            <div class="modal-content max-w-sm border-red-500/50 border-2">
+                <h2 class="text-4xl font-black mb-2 text-red-500">8切り</h2>
+                <p class="mb-6 text-gray-300">場を流します</p>
+                <button id="confirm-8giri-btn" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-10 rounded-xl w-full">OK</button>
             </div>
         </div>
         <div id="5skip-modal" class="hidden modal-overlay">
-            <div class="modal-content max-w-sm">
-                <h2 class="text-3xl font-bold mb-2 text-blue-400">5スキップ</h2>
-                <p class="mb-6">順番を飛ばします。</p>
-                <button id="confirm-5skip-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg w-full">OK</button>
+            <div class="modal-content max-w-sm border-blue-500/50 border-2">
+                <h2 class="text-4xl font-black mb-2 text-blue-500">5スキップ</h2>
+                <p class="mb-6 text-gray-300">順番を飛ばします</p>
+                <button id="confirm-5skip-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-10 rounded-xl w-full">OK</button>
             </div>
         </div>
         <div id="spade3-modal" class="hidden modal-overlay">
-            <div class="modal-content max-w-sm">
-                <h2 class="text-3xl font-bold mb-2 text-green-400">スペ3返し！</h2>
-                <p class="mb-6">ジョーカーを無効化し、場を流します。</p>
-                <button id="confirm-spade3-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg w-full">OK</button>
+            <div class="modal-content max-w-sm border-green-500/50 border-2">
+                <h2 class="text-3xl font-black mb-2 text-green-500">スペ3返し</h2>
+                <p class="mb-6 text-gray-300">ジョーカーを無効化</p>
+                <button id="confirm-spade3-btn" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-10 rounded-xl w-full">OK</button>
             </div>
         </div>
         <div id="agari-modal" class="hidden modal-overlay">
-            <div class="modal-content max-w-sm">
-                <h2 class="text-4xl font-bold mb-4 text-yellow-300">あがり！</h2>
-                <p class="mb-6">おめでとうございます！</p>
-                <button id="confirm-agari-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg w-full">次へ</button>
+            <div class="modal-content max-w-sm bg-yellow-500 text-slate-900">
+                <h2 class="text-5xl font-black mb-4">あがり！</h2>
+                <p class="mb-6 font-bold">おめでとうございます！</p>
+                <button id="confirm-agari-btn" class="bg-slate-900 text-white font-bold py-3 px-10 rounded-xl w-full">次へ</button>
             </div>
         </div>
         <div id="received-cards-modal" class="hidden modal-overlay">
             <div class="modal-content max-w-lg">
-                <h2 id="received-cards-title" class="text-xl font-bold mb-4">カードを受け取りました</h2>
+                <h2 id="received-cards-title" class="text-xl font-bold mb-4">カードを受信</h2>
                 <div id="received-cards-container" class="flex justify-center flex-wrap gap-2 mb-6"></div>
-                <button id="received-cards-ok-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-8 rounded-lg">OK</button>
+                <button id="received-cards-ok-btn" class="bg-blue-500 text-white font-bold py-2 px-8 rounded-lg">確認</button>
             </div>
         </div>
 
         <div id="dobon-success-modal" class="hidden modal-overlay z-[1500]">
-            <div class="modal-content bg-gradient-to-br from-yellow-200 to-yellow-500 text-black w-full max-w-2xl border-4 border-purple-600">
-                <h2 class="text-6xl font-black mb-2 text-purple-800 drop-shadow-white">ドボン！</h2>
-                <div id="dobon-player-info" class="mb-2 text-xl font-bold bg-white/50 rounded py-1"></div>
+            <div class="modal-content bg-gradient-to-br from-yellow-300 to-yellow-500 text-slate-900 w-full max-w-xl border-4 border-purple-600 relative overflow-hidden">
+                <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIiBmaWxsPSJub25lIiBzdHJva2U9InJnYmEoMCwwLDAsMC4wNSkiIHN0cm9rZS13aWR0aD0iMiI+PHBhdGggZD0iTTAgNDBMMDQgMEgwIDQwWiIvPjwvc3ZnPg==')] opacity-50"></div>
+                <h2 class="text-6xl font-black mb-2 text-purple-900 drop-shadow-md relative z-10">ドボン！</h2>
+                <div id="dobon-player-info" class="mb-4 text-xl font-bold bg-white/30 rounded-lg py-2 inline-block px-6 relative z-10"></div>
                 
-                <p class="font-bold text-sm text-left ml-4">手札</p>
-                <div id="dobon-hand-container" class="flex justify-center gap-2 mb-2 overflow-x-auto p-2"></div>
+                <div class="bg-white/20 p-4 rounded-xl mb-4 relative z-10">
+                    <p class="font-bold text-xs text-left ml-1 mb-1 opacity-70 uppercase">Hand</p>
+                    <div id="dobon-hand-container" class="flex justify-center gap-1 overflow-hidden"></div>
+                </div>
                 
-                <div class="my-2 border-t-2 border-black/20"></div>
+                <div class="bg-slate-900/10 p-4 rounded-xl mb-6 relative z-10">
+                    <p class="font-bold text-xs text-left ml-1 mb-1 opacity-70 uppercase">Field</p>
+                    <div id="dobon-field-container" class="flex justify-center gap-1 overflow-hidden"></div>
+                </div>
                 
-                <p class="font-bold text-sm text-left ml-4">場</p>
-                <div id="dobon-field-container" class="flex justify-center gap-2 mb-6 overflow-x-auto p-2"></div>
-                
-                <div>
-                    <button id="dobon-continue-btn" class="hidden bg-purple-800 hover:bg-purple-900 text-white font-bold py-3 px-10 rounded-lg text-xl shadow-xl transform transition hover:scale-105">ゲームに戻る</button>
-                    <p id="dobon-wait-message" class="hidden text-sm font-bold animate-pulse">次のプレイヤーの操作待ち...</p>
+                <div class="relative z-10">
+                    <button id="dobon-continue-btn" class="hidden bg-purple-900 hover:bg-purple-800 text-white font-bold py-4 px-12 rounded-2xl text-xl shadow-xl transition transform hover:scale-105">ゲームに戻る</button>
+                    <p id="dobon-wait-message" class="hidden text-sm font-bold animate-pulse text-purple-900">他のプレイヤーの確認待ち...</p>
                 </div>
             </div>
         </div>
 
         <div id="joker-suit-modal" class="hidden modal-overlay">
             <div class="modal-content max-w-md">
-                <h2 class="text-2xl font-bold mb-4">ジョーカーのスート選択</h2>
-                <p class="mb-6 text-sm text-gray-300">ジョーカーをどのスートとして扱いますか？<br>(縛り回避などに利用できます)</p>
+                <h2 class="text-2xl font-bold mb-6">スートを選択</h2>
                 <div id="joker-suit-buttons" class="flex justify-center gap-4">
-                    <button class="suit-button text-gray-800" data-suit="S">♠</button>
-                    <button class="suit-button text-red-500" data-suit="H">♥</button>
-                    <button class="suit-button text-red-500" data-suit="D">♦</button>
-                    <button class="suit-button text-gray-800" data-suit="C">♣</button>
+                    <button class="suit-button text-slate-900" data-suit="S">♠</button>
+                    <button class="suit-button text-red-600" data-suit="H">♥</button>
+                    <button class="suit-button text-red-600" data-suit="D">♦</button>
+                    <button class="suit-button text-slate-900" data-suit="C">♣</button>
                 </div>
             </div>
         </div>
@@ -547,7 +555,6 @@
             leaveGameBtn.classList.add('hidden');
         }
 
-        // 【修正】 退出関数を追加
         function confirmAndLeave() {
             if (confirm("本当にルームから退出しますか？")) {
                 handleLeaveGame();
@@ -627,13 +634,12 @@
                     const sortedPlayers = [...roomData.players].sort((a, b) => (a.rank || 99) - (b.rank || 99));
                     const playOrder = sortedPlayers.map(p => p.id);
 
-                    // スタートプレイヤー決定 (ルール 第2章)
+                    // スタートプレイヤー決定
                     let currentPlayerId;
                     const loser = roomData.players.find(p => p.rank === roomData.players.length);
                     if (loser) {
-                        currentPlayerId = loser.id; // 大貧民スタート
+                        currentPlayerId = loser.id;
                     } else {
-                        // 初回: ダイヤの3
                         const d3Owner = Object.keys(hands).find(id => hands[id].some(c => c.suit === 'D' && c.number === 3));
                         currentPlayerId = d3Owner || playOrder[0];
                     }
@@ -651,7 +657,6 @@
                         isRevolution: false,
                         isElevenBack: false,
                         rankings: [],
-                        log: [],
                         lastActionTimestamp: new Date().toISOString()
                     };
                     
@@ -667,13 +672,10 @@
         // --- Play Action ---
         async function playCards() {
             if (selectedCards.length === 0) return;
-            
-            // ジョーカーの数値を決めるための簡易チェック
             const hasJoker = selectedCards.some(c => c.suit === 'JOKER');
             const numberCards = selectedCards.filter(c => c.suit !== 'JOKER');
             
             if (hasJoker && numberCards.length > 0) {
-                // 複数枚出しのジョーカーはスートを選択させる（縛り判定用）
                 promptJokerSuit();
             } else {
                 executePlay(selectedCards);
@@ -695,7 +697,7 @@
                     const validation = isValidPlay(cardsToPlay, gs.field, gs.isRevolution, gs.isElevenBack);
                     if (!validation.valid) throw new Error(validation.message);
 
-                    // 反則あがりチェック (ルール 第9章)
+                    // 反則あがりチェック
                     const myHand = gs.hands[currentUser.uid];
                     if (myHand.length === cardsToPlay.length) {
                         const checkCard = cardsToPlay.find(c => c.suit !== 'JOKER') || cardsToPlay[0];
@@ -709,12 +711,11 @@
                     const newHand = myHand.filter(c => !cardsToPlay.find(sc => sc.id === c.id));
                     gs.hands[currentUser.uid] = newHand;
                     
-                    // カード情報解析
                     const mainCard = cardsToPlay.find(c => c.suit !== 'JOKER') || cardsToPlay[0];
                     const playedNum = mainCard.number;
                     const count = cardsToPlay.length;
 
-                    // スペ3返し判定 (ルール 第3章)
+                    // スペ3返し判定
                     const isSpade3 = (gs.field.cards.length === 1 && gs.field.cards[0].suit === 'JOKER' && 
                                       cardsToPlay.length === 1 && cardsToPlay[0].suit === 'S' && cardsToPlay[0].number === 3);
 
@@ -722,7 +723,6 @@
                     let finished = false;
                     if (newHand.length === 0) finished = true;
                     
-                    // 7渡し/10捨てであがる場合、即あがり扱いだがカード移動処理はスキップ
                     if ((playedNum === 7 || playedNum === 10) && newHand.length > 0 && newHand.length <= count) {
                         finished = true;
                         gs.hands[currentUser.uid] = [];
@@ -747,7 +747,6 @@
                             gs.status = 'awaiting_selection';
                             gs.pendingAction = { type: playedNum === 7 ? '7-pass' : '10-discard', playerId: currentUser.uid, count: count };
                         } else {
-                            // 革命・イレブンバック判定 (ルール 第7章)
                             const effect = handleSpecialCards(cardsToPlay, gs);
                             gs = effect.newGameState;
                             if (!effect.skipTurn) {
@@ -757,14 +756,14 @@
                         gs.passCount = 0;
                     }
 
-                    // フィールド更新
                     gs.field = { cards: cardsToPlay, lastPlayerId: currentUser.uid, suitLock: validation.newSuitLock };
+                    // cardCount を安全に更新
                     gs.players = gs.players.map(p => ({...p, cardCount: gs.hands[p.id]?.length || 0 }));
                     gs.lastActionTimestamp = new Date().toISOString();
 
                     // ゲーム終了判定
                     const active = gs.players.filter(p => !gs.rankings.includes(p.id));
-                    if (active.length <= 1 && !finished) { // あがり待機中は除外
+                    if (active.length <= 1 && !finished) {
                          const last = active[0];
                          if(last) gs.rankings.push(last.id);
                          finishGame(transaction, roomRef, roomData, gs.rankings);
@@ -792,7 +791,6 @@
                     gs.passCount += 1;
                     const activeCount = gs.players.filter(p => p.cardCount > 0 && !gs.rankings.includes(p.id)).length;
 
-                    // 全員パスで場が流れる
                     if (gs.passCount >= activeCount - 1 && gs.field.lastPlayerId) {
                         gs.currentPlayerId = gs.field.lastPlayerId; // 親になる
                         clearFieldAndReset(gs);
@@ -824,10 +822,9 @@
 
                     if (handSum !== fieldSum) throw new Error(`不一致！ 手札:${handSum} 場:${fieldSum}`);
 
-                    // ドボン成功
                     gs.status = 'awaiting_dobon_acknowledgement';
                     gs.rankings.push(currentUser.uid);
-                    gs.hands[currentUser.uid] = []; // 手札を空に
+                    gs.hands[currentUser.uid] = [];
                     
                     gs.dobonInfo = {
                         playerName: gs.players.find(p => p.id === currentUser.uid).name,
@@ -848,18 +845,11 @@
             const mainNum = nums[0] || played[0].number;
             const count = played.length;
 
-            // 革命 (4枚出し / 3を3枚)
             const isRev4 = (count === 4);
             const isRev3 = (count === 3 && mainNum === 3 && nonJokers.length > 0);
             
-            if (isRev4 || isRev3) {
-                gs.isRevolution = !gs.isRevolution;
-            }
-
-            // イレブンバック (11奇数枚)
-            if (mainNum === 11 && count % 2 !== 0) {
-                gs.isElevenBack = !gs.isElevenBack;
-            }
+            if (isRev4 || isRev3) gs.isRevolution = !gs.isRevolution;
+            if (mainNum === 11 && count % 2 !== 0) gs.isElevenBack = !gs.isElevenBack;
 
             return { newGameState: gs, skipTurn: false };
         }
@@ -873,12 +863,12 @@
 
         function getCardStrength(card, isRevolution = false, isElevenBack = false) {
             if (card.suit === 'JOKER') return 999;
-            const rev = isRevolution !== isElevenBack; // XOR logic
+            const rev = isRevolution !== isElevenBack;
             let s = card.number;
             if (s === 1) s = 14;
             if (s === 2) s = 15;
             if (rev) {
-                if (s === 3) return 16; // 革命時は3が最強
+                if (s === 3) return 16;
                 return 15 - (s - 3);
             }
             return s;
@@ -894,7 +884,6 @@
             const nums = played.map(c => c.suit==='JOKER' ? null : c.number).filter(n => n !== null);
             if ([...new Set(nums)].length > 1) return { valid: false, message: "同じ数字のみ出せます" };
 
-            // スペ3 vs Joker
             if (fieldIsJoker && playIsSpade3) return { valid: true, newSuitLock: null };
 
             if (field.cards.length > 0) {
@@ -905,7 +894,6 @@
 
                 if (pStr <= fStr) return { valid: false, message: "弱いカードは出せません" };
 
-                // 縛り判定
                 if (field.suitLock) {
                     const pSuits = getCombinedSuits(played);
                     if (pSuits !== field.suitLock) return { valid: false, message: `縛り！[${field.suitLock}]のみ可` };
@@ -948,20 +936,16 @@
             });
         }
 
-        // 【修正】 次のゲームへボタンの処理（ロジック修正・変数名競合解消）
         async function handleNextGameClick() {
             gameOverModal.classList.add('hidden');
             showScreen(lobbyScreen);
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
-            
             try {
                 await runTransaction(db, async (t) => {
-                    // 'doc'という変数名を 'roomDoc' に変更して競合回避
                     const roomDoc = await t.get(roomRef);
                     if(!roomDoc.exists()) return;
                     const d = roomDoc.data();
                     
-                    // 自分のステータスを 'lobby' に更新
                     const pl = d.players.map(p => {
                          const r = d.lastGameResult?.rankings?.indexOf(p.id);
                          return (p.id === currentUser.uid) 
@@ -969,7 +953,6 @@
                             : p;
                     });
                     
-                    // 全員がロビーに戻っていれば、誰であってもデータをクリアする
                     if(pl.every(p => p.view === 'lobby')) {
                         t.update(roomRef, { players: pl, gameState: deleteField(), lastGameResult: deleteField() });
                     } else {
@@ -979,7 +962,6 @@
             } catch(e) { console.error(e); }
         }
 
-        // 8切り、5スキップ、スペ3返し、あがり確認後の進行処理
         async function confirmAction(modalId, statusCheck) {
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             try {
@@ -1023,7 +1005,6 @@
             } catch(e){ console.error(e); }
         }
         
-        // 7渡し / 10捨て 選択処理
         async function confirmSelection() {
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             try {
@@ -1034,7 +1015,6 @@
                     
                     if (cardsForSelection.length !== action.count) throw new Error("枚数が不正です");
 
-                    // 手札から削除
                     gs.hands[currentUser.uid] = gs.hands[currentUser.uid].filter(c => !cardsForSelection.some(sc => sc.id === c.id));
                     
                     if (action.type === '7-pass') {
@@ -1048,7 +1028,6 @@
                     gs.currentPlayerId = getNextPlayerId(gs);
                     delete gs.pendingAction;
                     
-                    // あがりチェック
                     if (gs.hands[currentUser.uid].length === 0 && !gs.rankings.includes(currentUser.uid)) {
                         gs.rankings.push(currentUser.uid);
                         const active = gs.players.filter(p => !gs.rankings.includes(p.id));
@@ -1066,7 +1045,6 @@
             } catch(e) { showMessage(e.message); }
         }
         
-        // ドボンからの復帰
         async function resumeAfterDobon() {
              const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
              await runTransaction(db, async (t) => {
@@ -1090,7 +1068,7 @@
              dobonSuccessModal.classList.add('hidden');
         }
 
-        // --- UI Updates (Listeners) ---
+        // --- UI Updates ---
         function listenToRoomChanges(roomId) {
             if (unsubscribeRoom) unsubscribeRoom();
             unsubscribeRoom = onSnapshot(doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, roomId), (snapshot) => {
@@ -1104,7 +1082,7 @@
                 const me = localRoomData.players.find(p => p.id === currentUser.uid);
                 if (!me) { cleanupClientState(); return; }
                 
-                document.getElementById('player-count').textContent = `(${localRoomData.players.length}人)`;
+                document.getElementById('player-count').textContent = `${localRoomData.players.length}人`;
 
                 if (me.view === 'game' && localGameState.status) {
                     updateGameUI(localGameState, localRoomData.players);
@@ -1129,8 +1107,14 @@
             list.innerHTML = '';
             data.players.forEach(p => {
                 const li = document.createElement('li');
-                li.className = 'bg-white/10 p-3 rounded flex justify-between items-center';
-                li.innerHTML = `<span>${p.name}</span>${p.id === data.hostId ? '<span class="text-xs bg-yellow-500 text-black px-2 py-1 rounded font-bold">HOST</span>' : ''}`;
+                li.className = 'bg-slate-700/50 p-3 rounded-lg flex justify-between items-center border border-slate-600';
+                li.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center font-bold text-sm">${p.name.substring(0,1)}</div>
+                        <span>${p.name}</span>
+                    </div>
+                    ${p.id === data.hostId ? '<span class="text-xs bg-yellow-500 text-slate-900 px-2 py-1 rounded font-bold">HOST</span>' : ''}
+                `;
                 list.appendChild(li);
             });
             const btn = document.getElementById('start-game-btn');
@@ -1152,8 +1136,12 @@
             
             if (finished) {
                 const rank = gs.rankings.indexOf(currentUser.uid) + 1;
-                handDiv.innerHTML = `<div class="text-3xl font-bold text-yellow-400 animate-bounce py-8">あなたは ${rank}位 です</div>`;
+                handDiv.innerHTML = `<div class="w-full text-center"><div class="text-5xl font-black text-yellow-400 animate-bounce py-8 drop-shadow-lg">${rank}位</div><div class="text-slate-400 font-bold">WAITING...</div></div>`;
+                handDiv.classList.remove('justify-start');
+                handDiv.classList.add('justify-center');
             } else {
+                handDiv.classList.add('justify-start');
+                handDiv.classList.remove('justify-center');
                 myHand.forEach(c => {
                     const el = createCardEl(c);
                     if (selectedCards.some(s => s.id === c.id)) el.classList.add('selected');
@@ -1165,12 +1153,13 @@
             const fieldDiv = document.getElementById('field');
             fieldDiv.innerHTML = '';
             (gs.field.cards||[]).forEach(c => fieldDiv.appendChild(createCardEl(c)));
+            if(gs.field.cards.length === 0) fieldDiv.innerHTML = '<div class="w-20 h-28 border-2 border-dashed border-slate-600 rounded-lg flex items-center justify-center opacity-50"><span class="text-2xl">∅</span></div>';
             
             const infoDiv = document.getElementById('game-info');
             infoDiv.innerHTML = '';
-            if (gs.isRevolution) infoDiv.innerHTML += '<span class="text-red-500 bg-white/20 px-2 rounded">革命中</span>';
-            if (gs.isElevenBack) infoDiv.innerHTML += '<span class="text-blue-400 bg-white/20 px-2 rounded">イレブンバック</span>';
-            if (gs.field.suitLock) infoDiv.innerHTML += `<span class="text-green-400 bg-white/20 px-2 rounded">縛り: ${gs.field.suitLock}</span>`;
+            if (gs.isRevolution) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-red-600 px-2 py-1 rounded shadow-lg animate-pulse">革命</span>';
+            if (gs.isElevenBack) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-blue-500 px-2 py-1 rounded shadow-lg">11Back</span>';
+            if (gs.field.suitLock) infoDiv.innerHTML += `<span class="text-xs font-bold text-slate-900 bg-green-400 px-2 py-1 rounded shadow-lg">縛:${gs.field.suitLock}</span>`;
 
             const otherDiv = document.getElementById('other-players-container');
             otherDiv.innerHTML = '';
@@ -1178,11 +1167,21 @@
             const ordered = [...players.slice(myIdx + 1), ...players.slice(0, myIdx)];
             ordered.forEach(p => {
                 const div = document.createElement('div');
-                div.className = `player-info p-2 rounded text-center bg-black/40 ${p.id === gs.currentPlayerId ? 'current-turn' : ''}`;
+                const isCurrent = p.id === gs.currentPlayerId;
+                div.className = `player-info flex flex-col items-center ${isCurrent ? 'current-turn' : 'opacity-70'}`;
                 const rankIdx = gs.rankings.indexOf(p.id);
+                
+                // undefinedチェックを含む修正
+                const cardCountDisplay = (p.cardCount !== undefined) ? p.cardCount : '?';
+                
                 div.innerHTML = `
-                    <div class="font-bold truncate">${p.name}</div>
-                    <div class="text-2xl">${rankIdx !== -1 ? ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣'][rankIdx] : '🃏' + p.cardCount}</div>
+                    <div class="avatar w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-sm border-2 border-slate-500 mb-1 transition-transform duration-300">
+                        ${p.name.substring(0,1)}
+                    </div>
+                    <div class="font-bold truncate w-full text-center text-xs text-slate-300 mb-0.5">${p.name}</div>
+                    <div class="text-sm font-bold bg-slate-800/80 px-2 rounded-full">
+                        ${rankIdx !== -1 ? ['🥇','🥈','🥉','4th','5th','6th'][rankIdx] : '🃏' + cardCountDisplay}
+                    </div>
                 `;
                 otherDiv.appendChild(div);
             });
@@ -1203,27 +1202,44 @@
                 else if (gs.status === 'awaiting_agari_acknowledgement') agariModal.classList.remove('hidden');
             }
             
-            if (gs.status === 'awaiting_dobon_acknowledgement') {
-                showDobonModal(gs);
-            }
+            if (gs.status === 'awaiting_dobon_acknowledgement') showDobonModal(gs);
         }
         
         function createCardEl(c) {
             const div = document.createElement('div');
-            div.className = 'card shadow-md';
+            div.className = 'card';
+            
+            const numMap = {1:'A', 11:'J', 12:'Q', 13:'K'};
+            const displayNum = numMap[c.number] || c.number;
+
             if (c.suit === 'JOKER') {
                 div.classList.add('joker');
-                div.innerHTML = `<span class="text-xs">JOKER</span><span class="text-3xl">🃏</span><span class="text-xs rotate-180">JOKER</span>`;
+                div.innerHTML = `
+                    <div class="corner-index"><span class="text-xs font-bold pt-1">JK</span></div>
+                    <div class="center-decoration">🃏</div>
+                    <div class="bottom-index"><span class="text-xs font-bold">JOKER</span></div>
+                `;
                 if (c.designatedSuit) {
                     const s = {S:'♠',H:'♥',D:'♦',C:'♣'}[c.designatedSuit];
-                    div.innerHTML += `<span class="designated-suit ${['H','D'].includes(c.designatedSuit)?'text-red-500':'text-black'}">${s}</span>`;
+                    const colorClass = ['H','D'].includes(c.designatedSuit) ? 'text-red-600' : 'text-slate-900';
+                    div.innerHTML += `<div class="absolute top-1 right-2 ${colorClass} font-bold text-sm">${s}</div>`;
                 }
             } else {
                 const color = ['H','D'].includes(c.suit) ? 'red' : 'black';
                 const mark = {S:'♠',H:'♥',D:'♦',C:'♣'}[c.suit];
-                const num = {1:'A',11:'J',12:'Q',13:'K'}[c.number] || c.number;
+                
                 div.classList.add(color);
-                div.innerHTML = `<div class="suit-top text-left pl-1">${mark}</div><div class="number flex-1 flex items-center justify-center">${num}</div><div class="suit-bottom text-right pr-1">${mark}</div>`;
+                div.innerHTML = `
+                    <div class="corner-index">
+                        <span class="num">${displayNum}</span>
+                        <span class="suit">${mark}</span>
+                    </div>
+                    <div class="center-decoration">${mark}</div>
+                    <div class="bottom-index">
+                        <span class="text-sm font-bold">${displayNum}</span>
+                        <span class="text-xs">${mark}</span>
+                    </div>
+                `;
             }
             return div;
         }
@@ -1278,7 +1294,7 @@
             const c = document.getElementById('received-cards-container');
             c.innerHTML = '';
             evt.cards.forEach(card => c.appendChild(createCardEl(card)));
-            document.getElementById('received-cards-title').textContent = `${evt.senderName}からカードが届きました`;
+            document.getElementById('received-cards-title').textContent = `${evt.senderName}から受信`;
         }
 
         function showDobonModal(gs) {
@@ -1301,7 +1317,10 @@
             list.innerHTML = '';
             roomData.lastGameResult.rankings.forEach((pid, i) => {
                 const p = roomData.players.find(pl => pl.id === pid);
-                if(p) list.innerHTML += `<div class="flex justify-between border-b border-white/10 p-2"><span>${i+1}位</span><span class="font-bold">${p.name}</span></div>`;
+                if(p) list.innerHTML += `<div class="flex justify-between border-b border-slate-600 p-2 items-center">
+                    <span class="text-yellow-400 font-black text-xl">${i+1}位</span>
+                    <span class="font-bold text-lg">${p.name}</span>
+                </div>`;
             });
         }
 
