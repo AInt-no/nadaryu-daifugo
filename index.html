@@ -738,7 +738,7 @@
                 
                 // ミス回数のカウントアップ
                 let currentCount = (players[playerIdx].penaltyCount || 0) + 1;
-                players[playerIdx].penaltyCount = currentCount;
+                players[playerIdx].penaltyCount = currentCount; // 一旦更新
 
                 // 罰則情報作成
                 gs.penalty = {
@@ -751,6 +751,9 @@
                     // 2アウトで強制終了
                     const rankings = players.filter(p => p.id !== currentUser.uid).map(p => p.id);
                     rankings.push(currentUser.uid); // 最下位に追加
+
+                    // 【修正】 強制敗北したプレイヤーのカウントをリセット
+                    players[playerIdx].penaltyCount = 0;
 
                     transaction.update(roomRef, { 
                         gameState: deleteField(),
@@ -933,6 +936,10 @@
                         if (currentCount >= 2) {
                             const rankings = players.filter(p => p.id !== currentUser.uid).map(p => p.id);
                             rankings.push(currentUser.uid);
+                            
+                            // 敗北者のカウントリセット
+                            players[playerIdx].penaltyCount = 0;
+
                             transaction.update(roomRef, { 
                                 gameState: deleteField(),
                                 lastGameResult: { 
@@ -1416,6 +1423,7 @@
             if (gs.status === 'awaiting_dobon_acknowledgement') showDobonModal(gs);
         }
         
+        // ... (createCardEl, toggleSelect, promptJokerSuit, etc. are same as before) ...
         function createCardEl(c) {
             const div = document.createElement('div');
             div.className = 'card';
