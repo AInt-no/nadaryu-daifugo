@@ -242,6 +242,7 @@
             </div>
             
             <div class="w-full max-w-md">
+                <p id="lobby-status-message" class="hidden text-yellow-300 font-bold text-center mb-4 animate-pulse">現在試合進行中です。終了までお待ちください...</p>
                 <button id="start-game-btn" class="w-full bg-red-500 hover:bg-red-400 text-white font-black py-4 px-8 rounded-2xl text-2xl shadow-lg transform transition hover:scale-105 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed disabled:transform-none">GAME START</button>
                 <p class="mt-3 text-center text-xs text-gray-500">※2人以上で開始可能です</p>
             </div>
@@ -514,7 +515,7 @@
                     const roomDoc = await transaction.get(roomRef);
                     if (!roomDoc.exists()) throw new Error("ルームが見つかりません。");
                     const roomData = roomDoc.data();
-                    if (roomData.gameState) throw new Error("ゲーム進行中です。");
+                    // 途中参加許可 (gameStateチェック削除)
 
                     if (!roomData.players.find(p => p.id === currentUser.uid)) {
                         if (roomData.players.length >= 6) throw new Error("満員です。");
@@ -609,7 +610,6 @@
 
         async function startGame() {
             if (!currentRoomId) return;
-            // 【修正】 待機ルームに戻っていないプレイヤーのチェック
             const missingPlayers = localRoomData.players.filter(p => p.view !== 'lobby');
             if (missingPlayers.length > 0) {
                 const names = missingPlayers.map(p => p.name).join('\n');
@@ -625,7 +625,7 @@
                     if (!roomDoc.exists()) return;
                     const roomData = roomDoc.data();
                     
-                    // 【修正】 ロビーにいるプレイヤーのみで開始
+                    // ロビーにいるプレイヤーのみで開始
                     const validPlayers = roomData.players.filter(p => p.view === 'lobby');
                     if (validPlayers.length < 2) throw new Error("プレイヤーが足りません");
 
@@ -638,6 +638,7 @@
                         idx = (idx + 1) % validPlayers.length;
                     });
                     
+                    // 手札を通常の強さ順にソート
                     Object.keys(hands).forEach(pid => {
                         hands[pid].sort((a, b) => getCardStrength(a) - getCardStrength(b));
                     });
@@ -770,7 +771,7 @@
                         gameState: deleteField(),
                         lastGameResult: { 
                             rankings: rankings, 
-                            finalPenalty: gs.penalty, // 最後にカットインを出すため
+                            finalPenalty: gs.penalty,
                             resultType: 'disqualification',
                             loserId: currentUser.uid 
                         },
@@ -789,7 +790,6 @@
         async function executePlay(cardsToPlay) {
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             
-            // ローカル検証NGなら罰則トリガーして終了
             const dummyGs = localGameState;
             const validation = isValidPlay(cardsToPlay, dummyGs.field, dummyGs.isRevolution, dummyGs.isElevenBack);
             if (!validation.valid) {
@@ -1293,10 +1293,6 @@
             const list = document.getElementById('player-list');
             list.innerHTML = '';
             data.players.forEach(p => {
-                const badge = p.view === 'lobby' 
-                    ? '<span class="bg-green-500 text-white text-xs px-2 py-1 rounded font-bold ml-2">準備OK</span>' 
-                    : '<span class="bg-gray-500 text-gray-300 text-xs px-2 py-1 rounded font-bold ml-2">確認中</span>';
-
                 const li = document.createElement('li');
                 li.className = 'bg-slate-700/50 p-3 rounded-lg flex justify-between items-center border border-slate-600';
                 li.innerHTML = `
@@ -1304,7 +1300,6 @@
                         <div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center font-bold text-sm">${p.name.substring(0,1)}</div>
                         <span>${p.name}</span>
                         ${p.penaltyCount > 0 ? `<span class="text-xs text-red-400 border border-red-500 px-1 rounded">⚠${p.penaltyCount}</span>` : ''}
-                        ${badge}
                     </div>
                     ${p.id === data.hostId ? '<span class="text-xs bg-yellow-500 text-slate-900 px-2 py-1 rounded font-bold">HOST</span>' : ''}
                 `;
@@ -1313,7 +1308,7 @@
             const btn = document.getElementById('start-game-btn');
             if (currentUser.uid === data.hostId) {
                 btn.classList.remove('hidden');
-                // btn.disabled = data.players.length < 2; // ロジック内でチェックするのでボタンは常に押せるようにする
+                btn.disabled = data.players.length < 2;
             } else {
                 btn.classList.add('hidden');
             }
@@ -1436,6 +1431,7 @@
             if (gs.status === 'awaiting_dobon_acknowledgement') showDobonModal(gs);
         }
         
+        // ... (createCardEl, toggleSelect, promptJokerSuit, etc. are same as before) ...
         function createCardEl(c) {
             const div = document.createElement('div');
             div.className = 'card';
@@ -1547,6 +1543,7 @@
             const list = document.getElementById('rankings-list');
             list.innerHTML = '';
             
+            // 【修正】 2アウト失格時の表示ロジック
             const resultType = roomData.lastGameResult.resultType;
             
             if (resultType === 'disqualification') {
