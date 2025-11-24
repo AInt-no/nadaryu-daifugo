@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>灘流大富豪 (Rev.3)</title>
+    <title>灘流大富豪</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap');
@@ -857,6 +857,7 @@
         }
 
         // --- Special Card Handlers ---
+        // 【修正】 復活させた関数
         function handleSpecialCards(played, gs) {
             const nonJokers = played.filter(c => c.suit !== 'JOKER');
             const nums = [...new Set(nonJokers.map(c => c.number))];
@@ -1025,7 +1026,6 @@
                     if (action.type === '7-pass') {
                         const nextId = getNextPlayerId(gs);
                         gs.hands[nextId].push(...cardsForSelection);
-                        // 【修正】 常に通常の強さ順でソート（革命フラグを渡さない）
                         gs.hands[nextId].sort((a,b) => getCardStrength(a) - getCardStrength(b));
                         gs.lastEvent = { type: '7-pass', recipientId: nextId, senderName: gs.players.find(p=>p.id===currentUser.uid).name, cards: cardsForSelection, timestamp: Date.now() };
                     }
@@ -1209,7 +1209,6 @@
             infoDiv.innerHTML = '';
             if (gs.isRevolution) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-red-600 px-2 py-1 rounded shadow-lg animate-pulse">革命</span>';
             if (gs.isElevenBack) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-blue-500 px-2 py-1 rounded shadow-lg">11Back</span>';
-            // 【修正】 縛りの表示をマークに変更
             if (gs.field.suitLock) {
                 const suitMap = { S: '♠', H: '♥', D: '♦', C: '♣' };
                 const lockStr = gs.field.suitLock.split('').map(s => suitMap[s]).join('');
@@ -1241,7 +1240,6 @@
                 otherDiv.appendChild(div);
             });
 
-            // 自分のターンの強調表示
             const myHandArea = document.getElementById('my-hand-area');
             const isTurn = gs.currentPlayerId === currentUser.uid && !finished;
             
@@ -1260,11 +1258,34 @@
             const canDobon = !locked && !finished && myHand.length >= 2 && gs.field.cards.length > 0 && gs.field.lastPlayerId !== currentUser.uid;
             document.getElementById('dobon-btn').disabled = !canDobon;
 
-            if (gs.pendingAction?.playerId === currentUser.uid) {
+            document.getElementById('dobon-check-modal').classList.add('hidden');
+            document.getElementById('waiting-ack-modal').classList.add('hidden');
+            document.getElementById('dobon-success-modal').classList.add('hidden');
+            
+            const waitStatuses = ['awaiting_8giri_confirmation', 'awaiting_5skip_confirmation', 'awaiting_spade3_confirmation'];
+            
+            if (waitStatuses.includes(gs.status)) {
+                const isMyAction = gs.pendingAction?.playerId === currentUser.uid;
+                
+                if (isMyAction) {
+                    document.getElementById('waiting-ack-modal').classList.remove('hidden');
+                } else {
+                    const myAck = gs.pendingAction.acks && gs.pendingAction.acks.includes(currentUser.uid);
+                    if (!myAck) {
+                        const titleEl = document.getElementById('dobon-check-title');
+                        const descEl = document.getElementById('dobon-check-desc');
+                        if(gs.status === 'awaiting_8giri_confirmation') { titleEl.textContent='8切り！'; descEl.textContent='場が流れます。ドボンしますか？'; }
+                        if(gs.status === 'awaiting_spade3_confirmation') { titleEl.textContent='スペ3返し！'; descEl.textContent='ジョーカー無効化！ドボンしますか？'; }
+                        if(gs.status === 'awaiting_5skip_confirmation') { titleEl.textContent='5スキップ！'; descEl.textContent='ターンが飛びます。ドボンしますか？'; }
+                        
+                        document.getElementById('dobon-check-modal').classList.remove('hidden');
+                        document.getElementById('dobon-btn').disabled = false;
+                    } else {
+                        document.getElementById('waiting-ack-modal').classList.remove('hidden');
+                    }
+                }
+            } else if (gs.pendingAction?.playerId === currentUser.uid) {
                 if (gs.status === 'awaiting_selection') showSelectionModal(gs.pendingAction, myHand);
-                else if (gs.status === 'awaiting_8giri_confirmation') eightGiriModal.classList.remove('hidden');
-                else if (gs.status === 'awaiting_5skip_confirmation') fiveSkipModal.classList.remove('hidden');
-                else if (gs.status === 'awaiting_spade3_confirmation') spade3Modal.classList.remove('hidden');
                 else if (gs.status === 'awaiting_agari_acknowledgement') agariModal.classList.remove('hidden');
             }
             
