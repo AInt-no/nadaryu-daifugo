@@ -131,6 +131,19 @@
             transform: scale(1.1);
         }
 
+        /* --- 操作エリア（ターン強調用） --- */
+        #player-action-area {
+            transition: all 0.3s ease;
+            border-top: 2px solid rgba(255,255,255,0.1);
+        }
+        
+        /* 自分のターン時のスタイル */
+        #player-action-area.active-turn {
+            border-top: 4px solid #facc15; /* 黄色い太線 */
+            box-shadow: 0 -4px 25px rgba(250, 204, 21, 0.4); /* 黄色いグロー効果 */
+            background-color: rgba(30, 41, 59, 0.95);
+        }
+
         /* --- モーダル --- */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -236,7 +249,7 @@
                 </div>
             </div>
 
-            <div class="bg-slate-900/80 backdrop-blur-lg pb-6 pt-2 rounded-t-3xl border-t border-slate-700 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+            <div id="player-action-area" class="bg-slate-900/80 backdrop-blur-lg pb-6 pt-2 rounded-t-3xl border-t border-slate-700 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
                 <div id="action-buttons" class="flex justify-center items-center gap-4 mb-2 min-h-[50px]">
                     <button id="play-card-btn" class="bg-blue-500 hover:bg-blue-400 text-white font-bold py-3 px-8 rounded-xl shadow-lg disabled:bg-slate-700 disabled:text-slate-500 disabled:shadow-none transition active:scale-95">出す</button>
                     <button id="pass-btn" class="bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none transition active:scale-95">パス</button>
@@ -254,6 +267,14 @@
                     <button id="next-game-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-xl flex-1">次のゲームへ</button>
                     <button id="leave-room-btn" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded-xl">退出</button>
                 </div>
+            </div>
+        </div>
+        
+        <div id="aborted-modal" class="hidden modal-overlay z-[2000]">
+            <div class="modal-content w-full max-w-sm border-red-500 border-2">
+                <h2 class="text-2xl font-bold mb-4">ゲーム終了</h2>
+                <p class="mb-6 text-gray-300">対戦相手がいなくなりました。<br>ロビーに戻ります。</p>
+                <button id="aborted-ok-btn" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-xl w-full">ロビーへ戻る</button>
             </div>
         </div>
 
@@ -389,8 +410,10 @@
         const jokerSuitModal = document.getElementById('joker-suit-modal');
         const spade3Modal = document.getElementById('spade3-modal');
         const agariModal = document.getElementById('agari-modal');
+        const abortedModal = document.getElementById('aborted-modal');
         
         const leaveGameBtn = document.getElementById('leave-game-btn');
+        const playerActionArea = document.getElementById('player-action-area');
 
         // --- Auth & Initialization ---
         onAuthStateChanged(auth, async (user) => {
@@ -939,6 +962,31 @@
             } catch(e) { console.error(e); }
         }
 
+        async function handleGameAborted() {
+            abortedModal.classList.add('hidden');
+            showScreen(lobbyScreen);
+            
+            if (!currentRoomId) return;
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            
+            try {
+                await runTransaction(db, async (t) => {
+                    const roomDoc = await t.get(roomRef);
+                    if(!roomDoc.exists()) return;
+                    const d = roomDoc.data();
+                    
+                    // 強制的にロビーに戻す
+                    const pl = d.players.map(p => ({ ...p, view: 'lobby' }));
+                    
+                    t.update(roomRef, { 
+                        players: pl, 
+                        gameState: deleteField(), 
+                        lastGameResult: deleteField() 
+                    });
+                });
+            } catch(e) { console.error(e); }
+        }
+
         async function confirmAction(modalId, statusCheck) {
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             try {
@@ -1059,6 +1107,12 @@
                 const me = localRoomData.players.find(p => p.id === currentUser.uid);
                 if (!me) { cleanupClientState(); return; }
                 
+                // ゲーム中にプレイヤーが減った場合の検知
+                if (localRoomData.gameState && localRoomData.players.length < 2) {
+                    abortedModal.classList.remove('hidden');
+                    return;
+                }
+                
                 document.getElementById('player-count').textContent = `${localRoomData.players.length}人`;
 
                 if (me.view === 'game' && localGameState.status) {
@@ -1148,7 +1202,6 @@
                 div.className = `player-info flex flex-col items-center ${isCurrent ? 'current-turn' : 'opacity-70'}`;
                 const rankIdx = gs.rankings.indexOf(p.id);
                 
-                // 修正: 常に最新のgameStateからプレイヤー情報を取得する
                 const gamePlayer = gs.players.find(gp => gp.id === p.id);
                 const currentCardCount = gamePlayer ? gamePlayer.cardCount : 0;
                 
@@ -1166,6 +1219,14 @@
 
             const isTurn = gs.currentPlayerId === currentUser.uid && !finished;
             const locked = gs.status.startsWith('awaiting');
+            
+            // --- ターンの強調表示 ---
+            if (isTurn) {
+                playerActionArea.classList.add('active-turn');
+            } else {
+                playerActionArea.classList.remove('active-turn');
+            }
+
             document.getElementById('play-card-btn').disabled = !isTurn || locked;
             document.getElementById('pass-btn').disabled = !isTurn || locked || (!gs.field.cards.length);
             
@@ -1313,6 +1374,7 @@
         document.getElementById('next-game-btn').addEventListener('click', handleNextGameClick);
         document.getElementById('leave-room-btn').addEventListener('click', confirmAndLeave);
         leaveGameBtn.addEventListener('click', confirmAndLeave);
+        document.getElementById('aborted-ok-btn').addEventListener('click', handleGameAborted);
         
         document.getElementById('confirm-selection-btn').addEventListener('click', confirmSelection);
         document.getElementById('confirm-8giri-btn').addEventListener('click', () => confirmAction('8giri-modal', 'awaiting_8giri_confirmation'));
