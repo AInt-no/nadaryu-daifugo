@@ -195,11 +195,12 @@
         
         /* --- 罰則カットイン --- */
         #penalty-modal {
-            background-color: rgba(153, 27, 27, 0.9) !important; /* 濃い赤 */
+            background-color: rgba(153, 27, 27, 0.95) !important;
             z-index: 2000;
         }
         .penalty-text {
-            text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+            text-shadow: 3px 3px 0 #000, -1px -1px 0 #000;
+            line-height: 1.2;
         }
     </style>
 </head>
@@ -283,9 +284,9 @@
         </div>
 
         <div id="penalty-modal" class="hidden modal-overlay">
-            <div class="text-center">
-                <h1 id="penalty-title" class="text-6xl md:text-8xl font-black text-yellow-400 penalty-text animate-pulse mb-8"></h1>
-                <div id="penalty-detail" class="text-2xl md:text-4xl font-bold text-white bg-black/50 px-8 py-4 rounded-xl inline-block border-2 border-red-500"></div>
+            <div class="text-center w-full px-4">
+                <h1 id="penalty-title" class="text-5xl md:text-7xl font-black text-yellow-400 penalty-text animate-pulse mb-8 leading-tight"></h1>
+                <div id="penalty-detail" class="text-xl md:text-3xl font-bold text-white bg-black/50 px-8 py-4 rounded-xl inline-block border-2 border-red-500"></div>
             </div>
         </div>
 
@@ -486,7 +487,7 @@
             const newRoom = {
                 roomId: roomId,
                 hostId: currentUser.uid,
-                players: [{ id: currentUser.uid, name: playerName, view: 'lobby' }],
+                players: [{ id: currentUser.uid, name: playerName, view: 'lobby', penaltyCount: 0 }],
                 lastGameResult: null
             };
 
@@ -517,7 +518,7 @@
 
                     if (!roomData.players.find(p => p.id === currentUser.uid)) {
                         if (roomData.players.length >= 6) throw new Error("満員です。");
-                        const newPlayer = { id: currentUser.uid, name: playerName, view: 'lobby' };
+                        const newPlayer = { id: currentUser.uid, name: playerName, view: 'lobby', penaltyCount: 0 };
                         transaction.update(roomRef, { players: [...roomData.players, newPlayer] });
                     }
                 });
@@ -625,6 +626,7 @@
                         idx = (idx + 1) % roomData.players.length;
                     });
                     
+                    // 手札を通常の強さ順にソート
                     Object.keys(hands).forEach(pid => {
                         hands[pid].sort((a, b) => getCardStrength(a) - getCardStrength(b));
                     });
@@ -723,21 +725,50 @@
             promptNextJokerSuit();
         }
 
-        // 【追加】 罰則トリガー関数
+        // 【修正】 2OUT制対応の罰則トリガー
         async function triggerPenalty(reason) {
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             await runTransaction(db, async (transaction) => {
                 const roomDoc = await transaction.get(roomRef);
                 if (!roomDoc.exists()) return;
-                const gs = roomDoc.data().gameState;
-                const player = gs.players.find(p => p.id === currentUser.uid);
+                const roomData = roomDoc.data();
+                let gs = roomData.gameState;
+                const players = roomData.players;
+                const playerIdx = players.findIndex(p => p.id === currentUser.uid);
                 
+                // ミス回数のカウントアップ
+                let currentCount = (players[playerIdx].penaltyCount || 0) + 1;
+                players[playerIdx].penaltyCount = currentCount;
+
+                // 罰則情報作成
                 gs.penalty = {
-                    playerName: player.name,
-                    reason: reason,
+                    playerName: players[playerIdx].name,
+                    reason: reason + (currentCount >= 2 ? " (2OUT 敗北確定)" : ` (1OUT)`),
                     timestamp: Date.now()
                 };
-                transaction.update(roomRef, { gameState: gs });
+
+                if (currentCount >= 2) {
+                    // 2アウトで強制終了
+                    const rankings = players.filter(p => p.id !== currentUser.uid).map(p => p.id);
+                    rankings.push(currentUser.uid); // 最下位に追加
+
+                    transaction.update(roomRef, { 
+                        gameState: deleteField(),
+                        lastGameResult: { 
+                            rankings: rankings, 
+                            finalPenalty: gs.penalty, // 最後にカットインを出すため
+                            resultType: 'disqualification',
+                            loserId: currentUser.uid 
+                        },
+                        players: players.map(p => ({...p, view: 'results'})),
+                    });
+                } else {
+                    // 1アウトなら継続
+                    transaction.update(roomRef, { 
+                        gameState: gs,
+                        players: players
+                    });
+                }
             });
         }
 
@@ -745,7 +776,7 @@
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             
             // ローカル検証NGなら罰則トリガーして終了
-            const dummyGs = localGameState; // 簡易チェック用
+            const dummyGs = localGameState;
             const validation = isValidPlay(cardsToPlay, dummyGs.field, dummyGs.isRevolution, dummyGs.isElevenBack);
             if (!validation.valid) {
                 await triggerPenalty(validation.message);
@@ -763,7 +794,6 @@
                     
                     if (currentUser.uid !== gs.currentPlayerId) throw new Error("手番ではありません。");
                     
-                    // トランザクション内でも再検証（不正防止）
                     const validation = isValidPlay(cardsToPlay, gs.field, gs.isRevolution, gs.isElevenBack);
                     if (!validation.valid) throw new Error(validation.message);
 
@@ -837,7 +867,6 @@
                 });
                 selectedCards = [];
             } catch (e) {
-                // ここに来るエラーはアラート表示だけにする（罰則は既に上で処理済み）
                 console.error(e);
                 showMessage(e.message);
             }
@@ -885,16 +914,39 @@
                     const handSum = myHand.reduce((s, c) => s + (c.suit==='JOKER'?0:c.number), 0);
                     const fieldSum = field.reduce((s, c) => s + (c.suit==='JOKER'?0:c.number), 0);
 
-                    // 【修正】 ドボン失敗時の罰則処理
+                    // 【修正】 ドボン失敗時の罰則処理 (計算値は出さない)
                     if (handSum !== fieldSum) {
-                        const player = gs.players.find(p => p.id === currentUser.uid);
+                        // ここで処理を中断し、罰則をトリガーする
+                        // トランザクション内では他の関数を呼び出さない方が安全なため、フラグを立てて後続処理
+                        // ですが、ここでは罰則ロジックを統合します
+                        const players = roomDoc.data().players;
+                        const playerIdx = players.findIndex(p => p.id === currentUser.uid);
+                        let currentCount = (players[playerIdx].penaltyCount || 0) + 1;
+                        players[playerIdx].penaltyCount = currentCount;
+
                         gs.penalty = {
-                            playerName: player.name,
-                            reason: "ドボン失敗 (計算ミス)",
+                            playerName: players[playerIdx].name,
+                            reason: "ドボン失敗 (計算ミス)" + (currentCount >= 2 ? " (2OUT 敗北確定)" : ` (1OUT)`),
                             timestamp: Date.now()
                         };
-                        transaction.update(roomRef, { gameState: gs });
-                        return; // 処理終了
+
+                        if (currentCount >= 2) {
+                            const rankings = players.filter(p => p.id !== currentUser.uid).map(p => p.id);
+                            rankings.push(currentUser.uid);
+                            transaction.update(roomRef, { 
+                                gameState: deleteField(),
+                                lastGameResult: { 
+                                    rankings: rankings, 
+                                    finalPenalty: gs.penalty,
+                                    resultType: 'disqualification',
+                                    loserId: currentUser.uid 
+                                },
+                                players: players.map(p => ({...p, view: 'results'})),
+                            });
+                        } else {
+                            transaction.update(roomRef, { gameState: gs, players: players });
+                        }
+                        return;
                     }
 
                     gs.status = 'awaiting_dobon_acknowledgement';
@@ -1205,16 +1257,18 @@
                     showReceivedCards(localGameState.lastEvent);
                 }
 
-                // --- 罰則表示の検知 ---
-                if (localGameState.penalty && localGameState.penalty.timestamp !== lastPenaltyTime) {
-                    lastPenaltyTime = localGameState.penalty.timestamp;
-                    const p = localGameState.penalty;
-                    document.getElementById('penalty-title').textContent = `${p.playerName} 眼科！！`;
-                    document.getElementById('penalty-detail').textContent = p.reason;
+                // --- 罰則表示の検知 (リザルト画面での最終表示も含む) ---
+                const penaltyToCheck = localRoomData.lastGameResult?.finalPenalty || localGameState.penalty;
+                
+                if (penaltyToCheck && penaltyToCheck.timestamp !== lastPenaltyTime) {
+                    lastPenaltyTime = penaltyToCheck.timestamp;
+                    // 【修正】 プレイヤー名と「眼科！！」の間に改行を入れる
+                    document.getElementById('penalty-title').innerHTML = `${penaltyToCheck.playerName}<br>眼科！！`;
+                    document.getElementById('penalty-detail').textContent = penaltyToCheck.reason;
                     document.getElementById('penalty-modal').classList.remove('hidden');
                     setTimeout(() => {
                         document.getElementById('penalty-modal').classList.add('hidden');
-                    }, 3000); // 3秒表示
+                    }, 3000);
                 }
             });
         }
@@ -1230,6 +1284,7 @@
                     <div class="flex items-center gap-2">
                         <div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center font-bold text-sm">${p.name.substring(0,1)}</div>
                         <span>${p.name}</span>
+                        ${p.penaltyCount > 0 ? `<span class="text-xs text-red-400 border border-red-500 px-1 rounded">⚠${p.penaltyCount}</span>` : ''}
                     </div>
                     ${p.id === data.hostId ? '<span class="text-xs bg-yellow-500 text-slate-900 px-2 py-1 rounded font-bold">HOST</span>' : ''}
                 `;
@@ -1297,8 +1352,9 @@
                 const currentCardCount = gamePlayer ? gamePlayer.cardCount : 0;
                 
                 div.innerHTML = `
-                    <div class="avatar w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-sm border-2 border-slate-500 mb-1 transition-transform duration-300">
+                    <div class="avatar w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-sm border-2 border-slate-500 mb-1 transition-transform duration-300 relative">
                         ${p.name.substring(0,1)}
+                        ${p.penaltyCount > 0 ? `<span class="absolute -top-1 -right-1 bg-red-500 text-xs w-4 h-4 rounded-full flex items-center justify-center border border-white">${p.penaltyCount}</span>` : ''}
                     </div>
                     <div class="font-bold truncate w-full text-center text-xs text-slate-300 mb-0.5">${p.name}</div>
                     <div class="text-sm font-bold bg-slate-800/80 px-2 rounded-full">
@@ -1360,7 +1416,6 @@
             if (gs.status === 'awaiting_dobon_acknowledgement') showDobonModal(gs);
         }
         
-        // ... (createCardEl, toggleSelect, promptJokerSuit, etc. are same as before) ...
         function createCardEl(c) {
             const div = document.createElement('div');
             div.className = 'card';
@@ -1471,13 +1526,33 @@
             gameOverModal.classList.remove('hidden');
             const list = document.getElementById('rankings-list');
             list.innerHTML = '';
-            roomData.lastGameResult.rankings.forEach((pid, i) => {
-                const p = roomData.players.find(pl => pl.id === pid);
-                if(p) list.innerHTML += `<div class="flex justify-between border-b border-slate-600 p-2 items-center">
-                    <span class="text-yellow-400 font-black text-xl">${i+1}位</span>
-                    <span class="font-bold text-lg">${p.name}</span>
-                </div>`;
-            });
+            
+            // 【修正】 2アウト失格時の表示ロジック
+            const resultType = roomData.lastGameResult.resultType;
+            
+            if (resultType === 'disqualification') {
+                const loserId = roomData.lastGameResult.loserId;
+                roomData.players.forEach(p => {
+                    let rankText, nameStyle = "font-bold text-lg";
+                    if (p.id === loserId) {
+                        rankText = `<span class="text-red-500 font-black text-xl">失格 (2OUT)</span>`;
+                    } else {
+                        rankText = `<span class="text-yellow-400 font-black text-xl">1位</span>`;
+                    }
+                    list.innerHTML += `<div class="flex justify-between border-b border-slate-600 p-2 items-center">
+                        ${rankText}
+                        <span class="${nameStyle}">${p.name}</span>
+                    </div>`;
+                });
+            } else {
+                roomData.lastGameResult.rankings.forEach((pid, i) => {
+                    const p = roomData.players.find(pl => pl.id === pid);
+                    if(p) list.innerHTML += `<div class="flex justify-between border-b border-slate-600 p-2 items-center">
+                        <span class="text-yellow-400 font-black text-xl">${i+1}位</span>
+                        <span class="font-bold text-lg">${p.name}</span>
+                    </div>`;
+                });
+            }
         }
 
         // --- Event Listeners ---
