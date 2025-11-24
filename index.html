@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>灘流大富豪 (Rev.3)</title>
+    <title>灘流大富豪</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap');
@@ -202,8 +202,7 @@
     <div id="app" class="container mx-auto p-2 h-full flex flex-col relative">
 
         <div id="home-screen" class="flex flex-col items-center justify-center h-full">
-            <h1 class="text-5xl md:text-7xl font-black mb-2 text-yellow-400 tracking-tighter drop-shadow-lg">灘流大富豪</h1>
-            <p class="mb-10 text-lg text-gray-400 font-bold">Rev.3 Complete</p>
+            <h1 class="text-5xl md:text-7xl font-black mb-10 text-yellow-400 tracking-tighter drop-shadow-lg">灘流大富豪</h1>
             <div class="w-full max-w-md bg-slate-800/50 p-6 rounded-2xl shadow-2xl border border-slate-700 backdrop-blur-md">
                 <div class="mb-6">
                     <label class="block mb-2 text-sm font-bold text-gray-300">プレイヤー名</label>
@@ -249,7 +248,7 @@
                 </div>
             </div>
 
-            <div class="bg-slate-900/80 backdrop-blur-lg pb-6 pt-2 rounded-t-3xl border-t border-slate-700 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+            <div id="my-hand-area" class="bg-slate-900/80 backdrop-blur-lg pb-6 pt-2 rounded-t-3xl border-t border-slate-700 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-all duration-300">
                 <div id="action-buttons" class="flex justify-center items-center gap-4 mb-2 min-h-[50px]">
                     <button id="play-card-btn" class="bg-blue-500 hover:bg-blue-400 text-white font-bold py-3 px-8 rounded-xl shadow-lg disabled:bg-slate-700 disabled:text-slate-500 disabled:shadow-none transition active:scale-95">出す</button>
                     <button id="pass-btn" class="bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none transition active:scale-95">パス</button>
@@ -609,16 +608,13 @@
                         idx = (idx + 1) % roomData.players.length;
                     });
                     
-                    // 【復活】 手札を通常の強さ順にソート
                     Object.keys(hands).forEach(pid => {
                         hands[pid].sort((a, b) => getCardStrength(a) - getCardStrength(b));
                     });
 
-                    // 順番決め：前回の順位(rank)順、なければ登録順
                     const sortedPlayers = [...roomData.players].sort((a, b) => (a.rank || 99) - (b.rank || 99));
                     const playOrder = sortedPlayers.map(p => p.id);
 
-                    // スタートプレイヤー決定
                     let currentPlayerId;
                     const loser = roomData.players.find(p => p.rank === roomData.players.length);
                     if (loser) {
@@ -725,7 +721,6 @@
                     const validation = isValidPlay(cardsToPlay, gs.field, gs.isRevolution, gs.isElevenBack);
                     if (!validation.valid) throw new Error(validation.message);
 
-                    // 反則あがりチェック
                     const myHand = gs.hands[currentUser.uid];
                     if (myHand.length === cardsToPlay.length) {
                         const checkCard = cardsToPlay.find(c => c.suit !== 'JOKER') || cardsToPlay[0];
@@ -735,7 +730,6 @@
                         }
                     }
 
-                    // 手札更新
                     const newHand = myHand.filter(c => !cardsToPlay.find(sc => sc.id === c.id));
                     gs.hands[currentUser.uid] = newHand;
                     
@@ -746,11 +740,9 @@
                     const effect = handleSpecialCards(cardsToPlay, gs);
                     gs = effect.newGameState;
 
-                    // スペ3返し判定
                     const isSpade3 = (gs.field.cards.length === 1 && gs.field.cards[0].suit === 'JOKER' && 
                                       cardsToPlay.length === 1 && cardsToPlay[0].suit === 'S' && cardsToPlay[0].number === 3);
 
-                    // あがり判定
                     let finished = false;
                     if (newHand.length === 0) finished = true;
                     
@@ -1033,7 +1025,6 @@
                     if (action.type === '7-pass') {
                         const nextId = getNextPlayerId(gs);
                         gs.hands[nextId].push(...cardsForSelection);
-                        // 【修正】 常に通常の強さ順でソート（革命フラグを渡さない）
                         gs.hands[nextId].sort((a,b) => getCardStrength(a) - getCardStrength(b));
                         gs.lastEvent = { type: '7-pass', recipientId: nextId, senderName: gs.players.find(p=>p.id===currentUser.uid).name, cards: cardsForSelection, timestamp: Date.now() };
                     }
@@ -1217,6 +1208,7 @@
             infoDiv.innerHTML = '';
             if (gs.isRevolution) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-red-600 px-2 py-1 rounded shadow-lg animate-pulse">革命</span>';
             if (gs.isElevenBack) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-blue-500 px-2 py-1 rounded shadow-lg">11Back</span>';
+            // 【修正】 縛りの表示をマークに変更
             if (gs.field.suitLock) {
                 const suitMap = { S: '♠', H: '♥', D: '♦', C: '♣' };
                 const lockStr = gs.field.suitLock.split('').map(s => suitMap[s]).join('');
@@ -1248,7 +1240,18 @@
                 otherDiv.appendChild(div);
             });
 
+            // 自分のターンの強調表示
+            const myHandArea = document.getElementById('my-hand-area');
             const isTurn = gs.currentPlayerId === currentUser.uid && !finished;
+            
+            if (isTurn) {
+                myHandArea.classList.remove('border-slate-700');
+                myHandArea.classList.add('border-yellow-400', 'border-t-4', 'shadow-[0_-5px_20px_rgba(250,204,21,0.3)]');
+            } else {
+                myHandArea.classList.add('border-slate-700');
+                myHandArea.classList.remove('border-yellow-400', 'border-t-4', 'shadow-[0_-5px_20px_rgba(250,204,21,0.3)]');
+            }
+
             const locked = gs.status.startsWith('awaiting');
             document.getElementById('play-card-btn').disabled = !isTurn || locked;
             document.getElementById('pass-btn').disabled = !isTurn || locked || (!gs.field.cards.length);
@@ -1256,34 +1259,11 @@
             const canDobon = !locked && !finished && myHand.length >= 2 && gs.field.cards.length > 0 && gs.field.lastPlayerId !== currentUser.uid;
             document.getElementById('dobon-btn').disabled = !canDobon;
 
-            // モーダル制御
-            document.getElementById('dobon-check-modal').classList.add('hidden');
-            document.getElementById('waiting-ack-modal').classList.add('hidden');
-            
-            const waitStatuses = ['awaiting_8giri_confirmation', 'awaiting_5skip_confirmation', 'awaiting_spade3_confirmation'];
-            
-            if (waitStatuses.includes(gs.status)) {
-                const isMyAction = gs.pendingAction?.playerId === currentUser.uid;
-                
-                if (isMyAction) {
-                    document.getElementById('waiting-ack-modal').classList.remove('hidden');
-                } else {
-                    const myAck = gs.pendingAction.acks && gs.pendingAction.acks.includes(currentUser.uid);
-                    if (!myAck) {
-                        const titleEl = document.getElementById('dobon-check-title');
-                        const descEl = document.getElementById('dobon-check-desc');
-                        if(gs.status === 'awaiting_8giri_confirmation') { titleEl.textContent='8切り！'; descEl.textContent='場が流れます。ドボンしますか？'; }
-                        if(gs.status === 'awaiting_spade3_confirmation') { titleEl.textContent='スペ3返し！'; descEl.textContent='ジョーカー無効化！ドボンしますか？'; }
-                        if(gs.status === 'awaiting_5skip_confirmation') { titleEl.textContent='5スキップ！'; descEl.textContent='ターンが飛びます。ドボンしますか？'; }
-                        
-                        document.getElementById('dobon-check-modal').classList.remove('hidden');
-                        document.getElementById('dobon-btn').disabled = false;
-                    } else {
-                        document.getElementById('waiting-ack-modal').classList.remove('hidden');
-                    }
-                }
-            } else if (gs.pendingAction?.playerId === currentUser.uid) {
+            if (gs.pendingAction?.playerId === currentUser.uid) {
                 if (gs.status === 'awaiting_selection') showSelectionModal(gs.pendingAction, myHand);
+                else if (gs.status === 'awaiting_8giri_confirmation') eightGiriModal.classList.remove('hidden');
+                else if (gs.status === 'awaiting_5skip_confirmation') fiveSkipModal.classList.remove('hidden');
+                else if (gs.status === 'awaiting_spade3_confirmation') spade3Modal.classList.remove('hidden');
                 else if (gs.status === 'awaiting_agari_acknowledgement') agariModal.classList.remove('hidden');
             }
             
@@ -1422,9 +1402,6 @@
         leaveGameBtn.addEventListener('click', confirmAndLeave);
         
         document.getElementById('confirm-selection-btn').addEventListener('click', confirmSelection);
-        document.getElementById('confirm-8giri-btn').addEventListener('click', () => confirmAction('8giri-modal', 'awaiting_8giri_confirmation'));
-        document.getElementById('confirm-5skip-btn').addEventListener('click', () => confirmAction('5skip-modal', 'awaiting_5skip_confirmation'));
-        document.getElementById('confirm-spade3-btn').addEventListener('click', () => confirmAction('spade3-modal', 'awaiting_spade3_confirmation'));
         document.getElementById('confirm-agari-btn').addEventListener('click', () => confirmAction('agari-modal', 'awaiting_agari_acknowledgement'));
         document.getElementById('received-cards-ok-btn').addEventListener('click', () => receivedCardsModal.classList.add('hidden'));
         document.getElementById('dobon-continue-btn').addEventListener('click', resumeAfterDobon);
