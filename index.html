@@ -664,7 +664,6 @@
             }
         }
 
-        // --- 修正版 executePlay ---
         async function executePlay(cardsToPlay) {
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             try {
@@ -698,11 +697,22 @@
                     const playedNum = mainCard.number;
                     const count = cardsToPlay.length;
 
-                    // 【修正】 革命・イレブンバック判定をここ(分岐の前)に移動
-                    const effect = handleSpecialCards(cardsToPlay, gs);
-                    gs = effect.newGameState;
+                    // --- 【修正】革命判定を分岐の前に実行 ---
+                    const nonJokers = cardsToPlay.filter(c => c.suit !== 'JOKER');
+                    const nums = [...new Set(nonJokers.map(c => c.number))];
+                    const mainNumForRev = nums[0] || cardsToPlay[0].number;
+                    
+                    const isRev4 = (count === 4);
+                    const isRev3 = (count === 3 && mainNumForRev === 3 && nonJokers.length > 0);
+                    
+                    if (isRev4 || isRev3) {
+                        gs.isRevolution = !gs.isRevolution;
+                    }
+                    if (mainNumForRev === 11 && count % 2 !== 0) {
+                        gs.isElevenBack = !gs.isElevenBack;
+                    }
+                    // ---------------------------------------
 
-                    // スペ3返し判定
                     const isSpade3 = (gs.field.cards.length === 1 && gs.field.cards[0].suit === 'JOKER' && 
                                       cardsToPlay.length === 1 && cardsToPlay[0].suit === 'S' && cardsToPlay[0].number === 3);
 
@@ -720,27 +730,20 @@
                         gs.pendingAction = { type: 'agari', playerId: currentUser.uid };
                         gs.rankings.push(currentUser.uid);
                     } else {
-                        // 特殊処理分岐
                         if (isSpade3) {
                             gs.status = 'awaiting_spade3_confirmation';
-                            // 【修正】承認配列を追加
                             gs.pendingAction = { type: 'spade3', playerId: currentUser.uid, acks: [] };
                         } else if (playedNum === 8) {
                             gs.status = 'awaiting_8giri_confirmation';
-                            // 【修正】承認配列を追加
                             gs.pendingAction = { type: '8-giri', playerId: currentUser.uid, acks: [] };
                         } else if (playedNum === 5) {
                             gs.status = 'awaiting_5skip_confirmation';
-                            // 【修正】承認配列を追加
                             gs.pendingAction = { type: '5-skip', playerId: currentUser.uid, count: count, acks: [] };
                         } else if (playedNum === 7 || playedNum === 10) {
                             gs.status = 'awaiting_selection';
                             gs.pendingAction = { type: playedNum === 7 ? '7-pass' : '10-discard', playerId: currentUser.uid, count: count };
                         } else {
-                            // 通常カードの処理 (革命判定は既に上で終わっているため削除)
-                            if (!effect.skipTurn) {
-                                gs.currentPlayerId = getNextPlayerId(gs);
-                            }
+                            gs.currentPlayerId = getNextPlayerId(gs);
                         }
                         gs.passCount = 0;
                     }
@@ -825,21 +828,8 @@
             } catch (e) { showMessage(e.message); }
         }
 
-        // --- Special Card Handlers ---
-        function handleSpecialCards(played, gs) {
-            const nonJokers = played.filter(c => c.suit !== 'JOKER');
-            const nums = [...new Set(nonJokers.map(c => c.number))];
-            const mainNum = nums[0] || played[0].number;
-            const count = played.length;
-
-            const isRev4 = (count === 4);
-            const isRev3 = (count === 3 && mainNum === 3 && nonJokers.length > 0);
-            
-            if (isRev4 || isRev3) gs.isRevolution = !gs.isRevolution;
-            if (mainNum === 11 && count % 2 !== 0) gs.isElevenBack = !gs.isElevenBack;
-
-            return { newGameState: gs, skipTurn: false };
-        }
+        // --- Special Card Handlers (Removed unused helper) ---
+        // executePlay内で直接処理するため削除
 
         // --- Helper Logic ---
         function clearFieldAndReset(gameState) {
@@ -994,7 +984,8 @@
                     if (action.type === '7-pass') {
                         const nextId = getNextPlayerId(gs);
                         gs.hands[nextId].push(...cardsForSelection);
-                        gs.hands[nextId].sort((a,b) => getCardStrength(a) - getCardStrength(b));
+                        // 【修正】 ソート時に革命状態を正しく渡す
+                        gs.hands[nextId].sort((a,b) => getCardStrength(a, gs.isRevolution, gs.isElevenBack) - getCardStrength(b, gs.isRevolution, gs.isElevenBack));
                         gs.lastEvent = { type: '7-pass', recipientId: nextId, senderName: gs.players.find(p=>p.id===currentUser.uid).name, cards: cardsForSelection, timestamp: Date.now() };
                     }
 
@@ -1042,7 +1033,6 @@
              dobonSuccessModal.classList.add('hidden');
         }
 
-        // 【追加】 承認ボタンの処理
         async function acknowledgeFieldClear() {
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             try {
@@ -1060,7 +1050,6 @@
 
                     const activePlayers = gs.players.filter(p => !gs.rankings.includes(p.id));
                     
-                    // 自分以外の全員が承認したかチェック (-1 は出した本人分)
                     if (gs.pendingAction.acks.length >= activePlayers.length - 1) {
                         
                         if (gs.status === 'awaiting_5skip_confirmation') {
@@ -1074,7 +1063,6 @@
                                  gs.currentPlayerId = target;
                              }
                         } else {
-                             // 8切り / スペ3
                              clearFieldAndReset(gs);
                              gs.currentPlayerId = gs.pendingAction.playerId;
                         }
