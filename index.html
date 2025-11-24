@@ -771,7 +771,7 @@
                         gameState: deleteField(),
                         lastGameResult: { 
                             rankings: rankings, 
-                            finalPenalty: gs.penalty,
+                            finalPenalty: gs.penalty, // 最後にカットインを出すため
                             resultType: 'disqualification',
                             loserId: currentUser.uid 
                         },
@@ -790,6 +790,7 @@
         async function executePlay(cardsToPlay) {
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             
+            // ローカル検証NGなら罰則トリガーして終了
             const dummyGs = localGameState;
             const validation = isValidPlay(cardsToPlay, dummyGs.field, dummyGs.isRevolution, dummyGs.isElevenBack);
             if (!validation.valid) {
@@ -1149,6 +1150,7 @@
                     if (action.type === '7-pass') {
                         const nextId = getNextPlayerId(gs);
                         gs.hands[nextId].push(...cardsForSelection);
+                        // 【修正】 常に通常の強さ順でソート（革命フラグを渡さない）
                         gs.hands[nextId].sort((a,b) => getCardStrength(a) - getCardStrength(b));
                         gs.lastEvent = { type: '7-pass', recipientId: nextId, senderName: gs.players.find(p=>p.id===currentUser.uid).name, cards: cardsForSelection, timestamp: Date.now() };
                     }
@@ -1293,6 +1295,11 @@
             const list = document.getElementById('player-list');
             list.innerHTML = '';
             data.players.forEach(p => {
+                // 【復活】 ステータスバッジのロジック
+                const badge = p.view === 'lobby' 
+                    ? '<span class="bg-green-500 text-white text-xs px-2 py-1 rounded font-bold ml-2">準備OK</span>' 
+                    : '<span class="bg-gray-500 text-gray-300 text-xs px-2 py-1 rounded font-bold ml-2">確認中</span>';
+
                 const li = document.createElement('li');
                 li.className = 'bg-slate-700/50 p-3 rounded-lg flex justify-between items-center border border-slate-600';
                 li.innerHTML = `
@@ -1300,16 +1307,26 @@
                         <div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center font-bold text-sm">${p.name.substring(0,1)}</div>
                         <span>${p.name}</span>
                         ${p.penaltyCount > 0 ? `<span class="text-xs text-red-400 border border-red-500 px-1 rounded">⚠${p.penaltyCount}</span>` : ''}
-                    </div>
+                        ${badge} </div>
                     ${p.id === data.hostId ? '<span class="text-xs bg-yellow-500 text-slate-900 px-2 py-1 rounded font-bold">HOST</span>' : ''}
                 `;
                 list.appendChild(li);
             });
             const btn = document.getElementById('start-game-btn');
+            // 試合中はゲーム開始ボタンを表示するが、クリック時に警告が出るように変更済み
             if (currentUser.uid === data.hostId) {
-                btn.classList.remove('hidden');
-                btn.disabled = data.players.length < 2;
+                 const isGameActive = data.gameState && data.gameState.status !== 'finished';
+                 if (isGameActive) {
+                     document.getElementById('lobby-status-message').classList.remove('hidden');
+                     btn.disabled = true; // 試合中は押せないようにする
+                     btn.classList.add('hidden'); // または隠す
+                 } else {
+                     document.getElementById('lobby-status-message').classList.add('hidden');
+                     btn.disabled = false;
+                     btn.classList.remove('hidden');
+                 }
             } else {
+                document.getElementById('lobby-status-message').classList.toggle('hidden', !data.gameState);
                 btn.classList.add('hidden');
             }
         }
@@ -1347,6 +1364,7 @@
             infoDiv.innerHTML = '';
             if (gs.isRevolution) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-red-600 px-2 py-1 rounded shadow-lg animate-pulse">革命</span>';
             if (gs.isElevenBack) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-blue-500 px-2 py-1 rounded shadow-lg">11Back</span>';
+            // 【修正】 縛りの表示をマークに変更
             if (gs.field.suitLock) {
                 const suitMap = { S: '♠', H: '♥', D: '♦', C: '♣' };
                 const lockStr = gs.field.suitLock.split('').map(s => suitMap[s]).join('');
@@ -1379,6 +1397,7 @@
                 otherDiv.appendChild(div);
             });
 
+            // 自分のターンの強調表示
             const myHandArea = document.getElementById('my-hand-area');
             const isTurn = gs.currentPlayerId === currentUser.uid && !finished;
             
@@ -1431,7 +1450,6 @@
             if (gs.status === 'awaiting_dobon_acknowledgement') showDobonModal(gs);
         }
         
-        // ... (createCardEl, toggleSelect, promptJokerSuit, etc. are same as before) ...
         function createCardEl(c) {
             const div = document.createElement('div');
             div.className = 'card';
