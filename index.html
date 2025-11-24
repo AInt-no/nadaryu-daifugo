@@ -148,20 +148,15 @@
         }
         
         .selection-hand {
-             display: flex;
-             justify-content: center;
-             flex-wrap: wrap;
-             gap: 8px;
-             margin: 1rem 0;
-             padding: 1rem;
+             display: flex; justify-content: center; flex-wrap: wrap;
+             gap: 8px; margin: 1rem 0; padding: 1rem;
              background-color: rgba(255,255,255,0.05);
              border-radius: 8px;
-             
-             
-             max-height: 50vh; /* 画面の高さの50%までに制限 */
-             overflow-y: auto; /* それを超えたら縦スクロール */
-             align-content: flex-start; /* カードが少ない時は上寄せ */
-             -webkit-overflow-scrolling: touch; /* スマホでのスクロールを滑らかに */
+             /* スクロール対策 */
+             max-height: 50vh;
+             overflow-y: auto;
+             align-content: flex-start;
+             -webkit-overflow-scrolling: touch;
         }
 
         .suit-button {
@@ -173,33 +168,29 @@
         }
         .suit-button:active { transform: scale(0.9); }
 
-        /* --- ボタン類 --- */
+        /* --- ボタン類 (スマホ対応) --- */
         #reload-btn {
             position: fixed;
-            /* ノッチがあるスマホ対策: セーフエリア + 15px の位置に配置 */
             top: max(15px, env(safe-area-inset-top) + 15px);
             right: 15px;
-            width: 44px; height: 44px; /* タップしやすい大きさに拡大 */
+            width: 44px; height: 44px;
             background: rgba(255,255,255,0.1);
             border-radius: 50%; font-size: 1.2rem;
             display: flex; align-items: center; justify-content: center;
             backdrop-filter: blur(4px);
-            z-index: 9999; /* 最前面に固定 */
-            cursor: pointer; /* PCで指マークにする */
+            z-index: 9999;
+            cursor: pointer;
         }
-
         #leave-game-btn {
             position: fixed;
-            /* ノッチがあるスマホ対策 */
             top: max(15px, env(safe-area-inset-top) + 15px);
             left: 15px;
             background: rgba(239, 68, 68, 0.9);
-            padding: 10px 16px; /* パディングを広げて押しやすくする */
-            border-radius: 8px;
+            padding: 10px 16px; border-radius: 8px;
             font-size: 0.9rem; font-weight: bold;
-            z-index: 9999; /* 最前面に固定 */
+            z-index: 9999;
             cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3); /* 影をつけて浮き上がらせる */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
         }
     </style>
 </head>
@@ -207,6 +198,7 @@
 
     <button id="reload-btn" onclick="location.reload()" title="更新">🔄</button>
     <button id="leave-game-btn" class="hidden">退出</button>
+
     <div id="app" class="container mx-auto p-2 h-full flex flex-col relative">
 
         <div id="home-screen" class="flex flex-col items-center justify-center h-full">
@@ -291,27 +283,23 @@
             </div>
         </div>
 
-        <div id="8giri-modal" class="hidden modal-overlay">
-            <div class="modal-content max-w-sm border-red-500/50 border-2">
-                <h2 class="text-4xl font-black mb-2 text-red-500">8切り</h2>
-                <p class="mb-6 text-gray-300">場を流します</p>
-                <button id="confirm-8giri-btn" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-10 rounded-xl w-full">OK</button>
+        <div id="dobon-check-modal" class="hidden modal-overlay z-[1200]">
+            <div class="modal-content w-full max-w-md border-2 border-yellow-500">
+                <h2 class="text-3xl font-black mb-2 text-yellow-400" id="dobon-check-title">確認</h2>
+                <p class="mb-6 text-gray-300" id="dobon-check-desc">場が流れます。ドボンしますか？</p>
+                <div class="flex justify-center gap-4">
+                    <button onclick="document.getElementById('dobon-btn').click();" class="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-6 rounded-xl">ドボンする！</button>
+                    <button id="ack-field-clear-btn" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-xl">承認 (場を流す)</button>
+                </div>
             </div>
         </div>
-        <div id="5skip-modal" class="hidden modal-overlay">
-            <div class="modal-content max-w-sm border-blue-500/50 border-2">
-                <h2 class="text-4xl font-black mb-2 text-blue-500">5スキップ</h2>
-                <p class="mb-6 text-gray-300">順番を飛ばします</p>
-                <button id="confirm-5skip-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-10 rounded-xl w-full">OK</button>
+        
+        <div id="waiting-ack-modal" class="hidden modal-overlay z-[1200]">
+             <div class="modal-content max-w-sm">
+                <p class="text-lg font-bold animate-pulse text-yellow-300">他プレイヤーのドボン確認待ち...</p>
             </div>
         </div>
-        <div id="spade3-modal" class="hidden modal-overlay">
-            <div class="modal-content max-w-sm border-green-500/50 border-2">
-                <h2 class="text-3xl font-black mb-2 text-green-500">スペ3返し</h2>
-                <p class="mb-6 text-gray-300">ジョーカーを無効化</p>
-                <button id="confirm-spade3-btn" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-10 rounded-xl w-full">OK</button>
-            </div>
-        </div>
+
         <div id="agari-modal" class="hidden modal-overlay">
             <div class="modal-content max-w-sm bg-yellow-500 text-slate-900">
                 <h2 class="text-5xl font-black mb-4">あがり！</h2>
@@ -403,12 +391,9 @@
         
         const gameOverModal = document.getElementById('game-over-modal');
         const selectionModal = document.getElementById('selection-modal');
-        const eightGiriModal = document.getElementById('8giri-modal');
-        const fiveSkipModal = document.getElementById('5skip-modal');
         const receivedCardsModal = document.getElementById('received-cards-modal');
         const dobonSuccessModal = document.getElementById('dobon-success-modal');
         const jokerSuitModal = document.getElementById('joker-suit-modal');
-        const spade3Modal = document.getElementById('spade3-modal');
         const agariModal = document.getElementById('agari-modal');
         
         const leaveGameBtn = document.getElementById('leave-game-btn');
@@ -734,13 +719,13 @@
                         // 特殊処理分岐
                         if (isSpade3) {
                             gs.status = 'awaiting_spade3_confirmation';
-                            gs.pendingAction = { type: 'spade3', playerId: currentUser.uid };
+                            gs.pendingAction = { type: 'spade3', playerId: currentUser.uid, acks: [] };
                         } else if (playedNum === 8) {
                             gs.status = 'awaiting_8giri_confirmation';
-                            gs.pendingAction = { type: '8-giri', playerId: currentUser.uid };
+                            gs.pendingAction = { type: '8-giri', playerId: currentUser.uid, acks: [] };
                         } else if (playedNum === 5) {
                             gs.status = 'awaiting_5skip_confirmation';
-                            gs.pendingAction = { type: '5-skip', playerId: currentUser.uid, count: count };
+                            gs.pendingAction = { type: '5-skip', playerId: currentUser.uid, count: count, acks: [] };
                         } else if (playedNum === 7 || playedNum === 10) {
                             gs.status = 'awaiting_selection';
                             gs.pendingAction = { type: playedNum === 7 ? '7-pass' : '10-discard', playerId: currentUser.uid, count: count };
@@ -968,24 +953,11 @@
                     let gs = roomDoc.data().gameState;
                     if (gs.status !== statusCheck || gs.pendingAction?.playerId !== currentUser.uid) return;
 
-                    if (statusCheck === 'awaiting_5skip_confirmation') {
-                         const skips = (2 * gs.pendingAction.count) - 1;
-                         const active = gs.players.filter(p => !gs.rankings.includes(p.id)).length;
-                         if (skips >= active - 1) {
-                             clearFieldAndReset(gs);
-                             gs.currentPlayerId = currentUser.uid;
-                         } else {
-                             let target = currentUser.uid;
-                             for(let i=0; i<=skips; i++) target = getNextPlayerId({...gs, currentPlayerId: target});
-                             gs.currentPlayerId = target;
-                         }
+                    clearFieldAndReset(gs);
+                    if (statusCheck === 'awaiting_agari_acknowledgement') {
+                         gs.currentPlayerId = getNextPlayerId(gs);
                     } else {
-                        clearFieldAndReset(gs);
-                        if (statusCheck === 'awaiting_agari_acknowledgement') {
-                             gs.currentPlayerId = getNextPlayerId(gs);
-                        } else {
-                             gs.currentPlayerId = currentUser.uid;
-                        }
+                         gs.currentPlayerId = currentUser.uid;
                     }
                     
                     gs.status = 'playing';
@@ -1064,6 +1036,50 @@
                  }
              });
              dobonSuccessModal.classList.add('hidden');
+        }
+
+        async function acknowledgeFieldClear() {
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            try {
+                await runTransaction(db, async (t) => {
+                    const doc = await t.get(roomRef);
+                    if (!doc.exists()) return;
+                    let gs = doc.data().gameState;
+                    
+                    if (!['awaiting_8giri_confirmation', 'awaiting_5skip_confirmation', 'awaiting_spade3_confirmation'].includes(gs.status)) return;
+
+                    if (!gs.pendingAction.acks) gs.pendingAction.acks = [];
+                    if (!gs.pendingAction.acks.includes(currentUser.uid)) {
+                        gs.pendingAction.acks.push(currentUser.uid);
+                    }
+
+                    const activePlayers = gs.players.filter(p => !gs.rankings.includes(p.id));
+                    
+                    if (gs.pendingAction.acks.length >= activePlayers.length - 1) {
+                        
+                        if (gs.status === 'awaiting_5skip_confirmation') {
+                             const skips = (2 * gs.pendingAction.count) - 1;
+                             if (skips >= activePlayers.length - 1) {
+                                 clearFieldAndReset(gs);
+                                 gs.currentPlayerId = gs.pendingAction.playerId;
+                             } else {
+                                 let target = gs.pendingAction.playerId;
+                                 for(let i=0; i<=skips; i++) target = getNextPlayerId({...gs, currentPlayerId: target});
+                                 gs.currentPlayerId = target;
+                             }
+                        } else {
+                             clearFieldAndReset(gs);
+                             gs.currentPlayerId = gs.pendingAction.playerId;
+                        }
+                        
+                        gs.status = 'playing';
+                        delete gs.pendingAction;
+                    }
+
+                    t.update(roomRef, { gameState: gs });
+                });
+                document.getElementById('dobon-check-modal').classList.add('hidden');
+            } catch(e) { console.error(e); }
         }
 
         // --- UI Updates ---
@@ -1169,7 +1185,6 @@
                 div.className = `player-info flex flex-col items-center ${isCurrent ? 'current-turn' : 'opacity-70'}`;
                 const rankIdx = gs.rankings.indexOf(p.id);
                 
-                // 修正: 常に最新のgameStateからプレイヤー情報を取得する
                 const gamePlayer = gs.players.find(gp => gp.id === p.id);
                 const currentCardCount = gamePlayer ? gamePlayer.cardCount : 0;
                 
@@ -1193,11 +1208,34 @@
             const canDobon = !locked && !finished && myHand.length >= 2 && gs.field.cards.length > 0 && gs.field.lastPlayerId !== currentUser.uid;
             document.getElementById('dobon-btn').disabled = !canDobon;
 
-            if (gs.pendingAction?.playerId === currentUser.uid) {
+            // モーダル制御
+            document.getElementById('dobon-check-modal').classList.add('hidden');
+            document.getElementById('waiting-ack-modal').classList.add('hidden');
+            
+            const waitStatuses = ['awaiting_8giri_confirmation', 'awaiting_5skip_confirmation', 'awaiting_spade3_confirmation'];
+            
+            if (waitStatuses.includes(gs.status)) {
+                const isMyAction = gs.pendingAction?.playerId === currentUser.uid;
+                
+                if (isMyAction) {
+                    document.getElementById('waiting-ack-modal').classList.remove('hidden');
+                } else {
+                    const myAck = gs.pendingAction.acks && gs.pendingAction.acks.includes(currentUser.uid);
+                    if (!myAck) {
+                        const titleEl = document.getElementById('dobon-check-title');
+                        const descEl = document.getElementById('dobon-check-desc');
+                        if(gs.status === 'awaiting_8giri_confirmation') { titleEl.textContent='8切り！'; descEl.textContent='場が流れます。ドボンしますか？'; }
+                        if(gs.status === 'awaiting_spade3_confirmation') { titleEl.textContent='スペ3返し！'; descEl.textContent='ジョーカー無効化！ドボンしますか？'; }
+                        if(gs.status === 'awaiting_5skip_confirmation') { titleEl.textContent='5スキップ！'; descEl.textContent='ターンが飛びます。ドボンしますか？'; }
+                        
+                        document.getElementById('dobon-check-modal').classList.remove('hidden');
+                        document.getElementById('dobon-btn').disabled = false;
+                    } else {
+                        document.getElementById('waiting-ack-modal').classList.remove('hidden');
+                    }
+                }
+            } else if (gs.pendingAction?.playerId === currentUser.uid) {
                 if (gs.status === 'awaiting_selection') showSelectionModal(gs.pendingAction, myHand);
-                else if (gs.status === 'awaiting_8giri_confirmation') eightGiriModal.classList.remove('hidden');
-                else if (gs.status === 'awaiting_5skip_confirmation') fiveSkipModal.classList.remove('hidden');
-                else if (gs.status === 'awaiting_spade3_confirmation') spade3Modal.classList.remove('hidden');
                 else if (gs.status === 'awaiting_agari_acknowledgement') agariModal.classList.remove('hidden');
             }
             
@@ -1336,12 +1374,12 @@
         leaveGameBtn.addEventListener('click', confirmAndLeave);
         
         document.getElementById('confirm-selection-btn').addEventListener('click', confirmSelection);
-        document.getElementById('confirm-8giri-btn').addEventListener('click', () => confirmAction('8giri-modal', 'awaiting_8giri_confirmation'));
-        document.getElementById('confirm-5skip-btn').addEventListener('click', () => confirmAction('5skip-modal', 'awaiting_5skip_confirmation'));
-        document.getElementById('confirm-spade3-btn').addEventListener('click', () => confirmAction('spade3-modal', 'awaiting_spade3_confirmation'));
         document.getElementById('confirm-agari-btn').addEventListener('click', () => confirmAction('agari-modal', 'awaiting_agari_acknowledgement'));
         document.getElementById('received-cards-ok-btn').addEventListener('click', () => receivedCardsModal.classList.add('hidden'));
         document.getElementById('dobon-continue-btn').addEventListener('click', resumeAfterDobon);
+        
+        // 承認ボタン
+        document.getElementById('ack-field-clear-btn').addEventListener('click', acknowledgeFieldClear);
 
     </script>
 </body>
