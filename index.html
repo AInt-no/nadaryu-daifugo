@@ -379,7 +379,6 @@
         let localRoomData = {};
         let localGameState = {};
         let acknowledgedEventTimestamp = null;
-        // ジョーカー選択用ステート
         let jokerAssignmentState = { jokers: [], currentIndex: 0, usedSuits: [] };
 
         const SUITS = ['S', 'H', 'D', 'C'];
@@ -610,7 +609,7 @@
                         idx = (idx + 1) % roomData.players.length;
                     });
                     
-                    // 【復活】 デフォルトのソート機能（強さ順）
+                    // 【復活】 手札を通常の強さ順にソート
                     Object.keys(hands).forEach(pid => {
                         hands[pid].sort((a, b) => getCardStrength(a) - getCardStrength(b));
                     });
@@ -662,7 +661,6 @@
             const nonJokers = selectedCards.filter(c => c.suit !== 'JOKER');
             
             if (jokers.length > 0) {
-                // 選択開始
                 jokerAssignmentState = {
                     jokers: jokers,
                     currentIndex: 0,
@@ -692,7 +690,6 @@
             document.querySelectorAll('.suit-button').forEach(b => {
                 const s = b.dataset.suit;
                 b.disabled = usedSuits.includes(s);
-                // リスナー重複防止のため一旦削除して再登録
                 const newBtn = b.cloneNode(true);
                 b.parentNode.replaceChild(newBtn, b);
                 newBtn.addEventListener('click', () => handleJokerSuitSelection(s));
@@ -703,7 +700,6 @@
             const { jokers, currentIndex } = jokerAssignmentState;
             const currentJoker = jokers[currentIndex];
             
-            // selectedCards内の該当ジョーカーをクローンしてスートを適用
             const idx = selectedCards.findIndex(c => c.id === currentJoker.id);
             if (idx !== -1) {
                 selectedCards[idx] = { ...selectedCards[idx], designatedSuit: suit };
@@ -768,7 +764,6 @@
                         gs.pendingAction = { type: 'agari', playerId: currentUser.uid };
                         gs.rankings.push(currentUser.uid);
                     } else {
-                        // 特殊処理分岐
                         if (isSpade3) {
                             gs.status = 'awaiting_spade3_confirmation';
                             gs.pendingAction = { type: 'spade3', playerId: currentUser.uid, acks: [] };
@@ -1038,7 +1033,7 @@
                     if (action.type === '7-pass') {
                         const nextId = getNextPlayerId(gs);
                         gs.hands[nextId].push(...cardsForSelection);
-                        // 【修正】 ここでソートするが、革命フラグは無視する（常に通常順）
+                        // 【修正】 常に通常の強さ順でソート（革命フラグを渡さない）
                         gs.hands[nextId].sort((a,b) => getCardStrength(a) - getCardStrength(b));
                         gs.lastEvent = { type: '7-pass', recipientId: nextId, senderName: gs.players.find(p=>p.id===currentUser.uid).name, cards: cardsForSelection, timestamp: Date.now() };
                     }
@@ -1222,7 +1217,11 @@
             infoDiv.innerHTML = '';
             if (gs.isRevolution) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-red-600 px-2 py-1 rounded shadow-lg animate-pulse">革命</span>';
             if (gs.isElevenBack) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-blue-500 px-2 py-1 rounded shadow-lg">11Back</span>';
-            if (gs.field.suitLock) infoDiv.innerHTML += `<span class="text-xs font-bold text-slate-900 bg-green-400 px-2 py-1 rounded shadow-lg">縛:${gs.field.suitLock}</span>`;
+            if (gs.field.suitLock) {
+                const suitMap = { S: '♠', H: '♥', D: '♦', C: '♣' };
+                const lockStr = gs.field.suitLock.split('').map(s => suitMap[s]).join('');
+                infoDiv.innerHTML += `<span class="text-xs font-bold text-slate-900 bg-green-400 px-2 py-1 rounded shadow-lg">縛:${lockStr}</span>`;
+            }
 
             const otherDiv = document.getElementById('other-players-container');
             otherDiv.innerHTML = '';
@@ -1423,6 +1422,9 @@
         leaveGameBtn.addEventListener('click', confirmAndLeave);
         
         document.getElementById('confirm-selection-btn').addEventListener('click', confirmSelection);
+        document.getElementById('confirm-8giri-btn').addEventListener('click', () => confirmAction('8giri-modal', 'awaiting_8giri_confirmation'));
+        document.getElementById('confirm-5skip-btn').addEventListener('click', () => confirmAction('5skip-modal', 'awaiting_5skip_confirmation'));
+        document.getElementById('confirm-spade3-btn').addEventListener('click', () => confirmAction('spade3-modal', 'awaiting_spade3_confirmation'));
         document.getElementById('confirm-agari-btn').addEventListener('click', () => confirmAction('agari-modal', 'awaiting_agari_acknowledgement'));
         document.getElementById('received-cards-ok-btn').addEventListener('click', () => receivedCardsModal.classList.add('hidden'));
         document.getElementById('dobon-continue-btn').addEventListener('click', resumeAfterDobon);
