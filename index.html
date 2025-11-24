@@ -165,28 +165,39 @@
 
         /* --- ボタン類 --- */
         #reload-btn {
-            position: fixed; top: 15px; right: 15px;
-            width: 40px; height: 40px;
+            position: fixed;
+            /* ノッチがあるスマホ対策: セーフエリア + 15px の位置に配置 */
+            top: max(15px, env(safe-area-inset-top) + 15px);
+            right: 15px;
+            width: 44px; height: 44px; /* タップしやすい大きさに拡大 */
             background: rgba(255,255,255,0.1);
             border-radius: 50%; font-size: 1.2rem;
             display: flex; align-items: center; justify-content: center;
-            backdrop-filter: blur(4px); z-index: 1100;
+            backdrop-filter: blur(4px);
+            z-index: 9999; /* 最前面に固定 */
+            cursor: pointer; /* PCで指マークにする */
         }
+
         #leave-game-btn {
-            position: fixed; top: 15px; left: 15px;
+            position: fixed;
+            /* ノッチがあるスマホ対策 */
+            top: max(15px, env(safe-area-inset-top) + 15px);
+            left: 15px;
             background: rgba(239, 68, 68, 0.9);
-            padding: 6px 12px; border-radius: 8px;
-            font-size: 0.8rem; font-weight: bold;
-            z-index: 1100;
+            padding: 10px 16px; /* パディングを広げて押しやすくする */
+            border-radius: 8px;
+            font-size: 0.9rem; font-weight: bold;
+            z-index: 9999; /* 最前面に固定 */
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3); /* 影をつけて浮き上がらせる */
         }
     </style>
 </head>
-<body class="text-white h-screen overflow-hidden">
+<body class="text-white h-screen overflow-hidden bg-slate-900">
 
+    <button id="reload-btn" onclick="location.reload()" title="更新">🔄</button>
+    <button id="leave-game-btn" class="hidden">退出</button>
     <div id="app" class="container mx-auto p-2 h-full flex flex-col relative">
-
-        <button id="reload-btn" onclick="location.reload()" title="更新">🔄</button>
-        <button id="leave-game-btn" class="hidden">退出</button>
 
         <div id="home-screen" class="flex flex-col items-center justify-center h-full">
             <h1 class="text-5xl md:text-7xl font-black mb-2 text-yellow-400 tracking-tighter drop-shadow-lg">灘流大富豪</h1>
