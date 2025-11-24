@@ -166,6 +166,7 @@
             transition: transform 0.1s;
         }
         .suit-button:active { transform: scale(0.9); }
+        .suit-button:disabled { opacity: 0.2; cursor: not-allowed; transform: none; }
 
         /* --- ボタン類 --- */
         #reload-btn {
@@ -378,6 +379,8 @@
         let localRoomData = {};
         let localGameState = {};
         let acknowledgedEventTimestamp = null;
+        // ジョーカー選択用ステート
+        let jokerAssignmentState = { jokers: [], currentIndex: 0, usedSuits: [] };
 
         const SUITS = ['S', 'H', 'D', 'C'];
         const NUMBERS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 1, 2];
@@ -607,10 +610,10 @@
                         idx = (idx + 1) % roomData.players.length;
                     });
                     
-                    // 手札ソート
-                    Object.keys(hands).forEach(pid => {
-                        hands[pid].sort((a, b) => getCardStrength(a) - getCardStrength(b));
-                    });
+                    // 【変更】 自動ソートを削除
+                    // Object.keys(hands).forEach(pid => {
+                    //     hands[pid].sort((a, b) => getCardStrength(a) - getCardStrength(b));
+                    // });
 
                     // 順番決め：前回の順位(rank)順、なければ登録順
                     const sortedPlayers = [...roomData.players].sort((a, b) => (a.rank || 99) - (b.rank || 99));
@@ -652,16 +655,64 @@
         }
 
         // --- Play Action ---
+        // 【修正】 ジョーカー個別選択対応
         async function playCards() {
             if (selectedCards.length === 0) return;
-            const hasJoker = selectedCards.some(c => c.suit === 'JOKER');
-            const numberCards = selectedCards.filter(c => c.suit !== 'JOKER');
             
-            if (hasJoker && numberCards.length > 0) {
-                promptJokerSuit();
+            const jokers = selectedCards.filter(c => c.suit === 'JOKER');
+            const nonJokers = selectedCards.filter(c => c.suit !== 'JOKER');
+            
+            if (jokers.length > 0) {
+                // 選択開始
+                jokerAssignmentState = {
+                    jokers: jokers,
+                    currentIndex: 0,
+                    usedSuits: nonJokers.map(c => c.suit)
+                };
+                promptNextJokerSuit();
             } else {
                 executePlay(selectedCards);
             }
+        }
+
+        function promptNextJokerSuit() {
+            const { jokers, currentIndex, usedSuits } = jokerAssignmentState;
+
+            if (currentIndex >= jokers.length) {
+                jokerSuitModal.classList.add('hidden');
+                executePlay(selectedCards);
+                return;
+            }
+
+            jokerSuitModal.classList.remove('hidden');
+            const titleEl = document.querySelector('#joker-suit-modal h2');
+            titleEl.textContent = jokers.length > 1 
+                ? `ジョーカー(${currentIndex + 1}/${jokers.length})のスート選択` 
+                : 'ジョーカーのスート選択';
+
+            document.querySelectorAll('.suit-button').forEach(b => {
+                const s = b.dataset.suit;
+                b.disabled = usedSuits.includes(s);
+                // リスナー重複防止のため一旦削除して再登録
+                const newBtn = b.cloneNode(true);
+                b.parentNode.replaceChild(newBtn, b);
+                newBtn.addEventListener('click', () => handleJokerSuitSelection(s));
+            });
+        }
+
+        function handleJokerSuitSelection(suit) {
+            const { jokers, currentIndex } = jokerAssignmentState;
+            const currentJoker = jokers[currentIndex];
+            
+            // selectedCards内の該当ジョーカーをクローンしてスートを適用
+            const idx = selectedCards.findIndex(c => c.id === currentJoker.id);
+            if (idx !== -1) {
+                selectedCards[idx] = { ...selectedCards[idx], designatedSuit: suit };
+            }
+
+            jokerAssignmentState.usedSuits.push(suit);
+            jokerAssignmentState.currentIndex++;
+            promptNextJokerSuit();
         }
 
         async function executePlay(cardsToPlay) {
@@ -697,22 +748,11 @@
                     const playedNum = mainCard.number;
                     const count = cardsToPlay.length;
 
-                    // --- 【修正】革命判定を分岐の前に実行 ---
-                    const nonJokers = cardsToPlay.filter(c => c.suit !== 'JOKER');
-                    const nums = [...new Set(nonJokers.map(c => c.number))];
-                    const mainNumForRev = nums[0] || cardsToPlay[0].number;
-                    
-                    const isRev4 = (count === 4);
-                    const isRev3 = (count === 3 && mainNumForRev === 3 && nonJokers.length > 0);
-                    
-                    if (isRev4 || isRev3) {
-                        gs.isRevolution = !gs.isRevolution;
-                    }
-                    if (mainNumForRev === 11 && count % 2 !== 0) {
-                        gs.isElevenBack = !gs.isElevenBack;
-                    }
-                    // ---------------------------------------
+                    // 【修正】 革命・イレブンバック判定をここ(分岐の前)に移動
+                    const effect = handleSpecialCards(cardsToPlay, gs);
+                    gs = effect.newGameState;
 
+                    // スペ3返し判定
                     const isSpade3 = (gs.field.cards.length === 1 && gs.field.cards[0].suit === 'JOKER' && 
                                       cardsToPlay.length === 1 && cardsToPlay[0].suit === 'S' && cardsToPlay[0].number === 3);
 
@@ -730,20 +770,27 @@
                         gs.pendingAction = { type: 'agari', playerId: currentUser.uid };
                         gs.rankings.push(currentUser.uid);
                     } else {
+                        // 特殊処理分岐
                         if (isSpade3) {
                             gs.status = 'awaiting_spade3_confirmation';
+                            // 【修正】承認配列を追加
                             gs.pendingAction = { type: 'spade3', playerId: currentUser.uid, acks: [] };
                         } else if (playedNum === 8) {
                             gs.status = 'awaiting_8giri_confirmation';
+                            // 【修正】承認配列を追加
                             gs.pendingAction = { type: '8-giri', playerId: currentUser.uid, acks: [] };
                         } else if (playedNum === 5) {
                             gs.status = 'awaiting_5skip_confirmation';
+                            // 【修正】承認配列を追加
                             gs.pendingAction = { type: '5-skip', playerId: currentUser.uid, count: count, acks: [] };
                         } else if (playedNum === 7 || playedNum === 10) {
                             gs.status = 'awaiting_selection';
                             gs.pendingAction = { type: playedNum === 7 ? '7-pass' : '10-discard', playerId: currentUser.uid, count: count };
                         } else {
-                            gs.currentPlayerId = getNextPlayerId(gs);
+                            // 通常カードの処理 (革命判定は既に上で終わっているため削除)
+                            if (!effect.skipTurn) {
+                                gs.currentPlayerId = getNextPlayerId(gs);
+                            }
                         }
                         gs.passCount = 0;
                     }
@@ -828,8 +875,21 @@
             } catch (e) { showMessage(e.message); }
         }
 
-        // --- Special Card Handlers (Removed unused helper) ---
-        // executePlay内で直接処理するため削除
+        // --- Special Card Handlers ---
+        function handleSpecialCards(played, gs) {
+            const nonJokers = played.filter(c => c.suit !== 'JOKER');
+            const nums = [...new Set(nonJokers.map(c => c.number))];
+            const mainNum = nums[0] || played[0].number;
+            const count = played.length;
+
+            const isRev4 = (count === 4);
+            const isRev3 = (count === 3 && mainNum === 3 && nonJokers.length > 0);
+            
+            if (isRev4 || isRev3) gs.isRevolution = !gs.isRevolution;
+            if (mainNum === 11 && count % 2 !== 0) gs.isElevenBack = !gs.isElevenBack;
+
+            return { newGameState: gs, skipTurn: false };
+        }
 
         // --- Helper Logic ---
         function clearFieldAndReset(gameState) {
@@ -984,8 +1044,10 @@
                     if (action.type === '7-pass') {
                         const nextId = getNextPlayerId(gs);
                         gs.hands[nextId].push(...cardsForSelection);
-                        // 【修正】 ソート時に革命状態を正しく渡す
-                        gs.hands[nextId].sort((a,b) => getCardStrength(a, gs.isRevolution, gs.isElevenBack) - getCardStrength(b, gs.isRevolution, gs.isElevenBack));
+                        
+                        // 【変更】 自動ソートを削除（受け取ったカードは末尾に追加される）
+                        // gs.hands[nextId].sort((a,b) => getCardStrength(a, gs.isRevolution, gs.isElevenBack) - getCardStrength(b, gs.isRevolution, gs.isElevenBack));
+                        
                         gs.lastEvent = { type: '7-pass', recipientId: nextId, senderName: gs.players.find(p=>p.id===currentUser.uid).name, cards: cardsForSelection, timestamp: Date.now() };
                     }
 
