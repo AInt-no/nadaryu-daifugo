@@ -610,10 +610,10 @@
                         idx = (idx + 1) % roomData.players.length;
                     });
                     
-                    // 【変更】 自動ソートを削除
-                    // Object.keys(hands).forEach(pid => {
-                    //     hands[pid].sort((a, b) => getCardStrength(a) - getCardStrength(b));
-                    // });
+                    // 【復活】 デフォルトのソート機能（強さ順）
+                    Object.keys(hands).forEach(pid => {
+                        hands[pid].sort((a, b) => getCardStrength(a) - getCardStrength(b));
+                    });
 
                     // 順番決め：前回の順位(rank)順、なければ登録順
                     const sortedPlayers = [...roomData.players].sort((a, b) => (a.rank || 99) - (b.rank || 99));
@@ -655,7 +655,6 @@
         }
 
         // --- Play Action ---
-        // 【修正】 ジョーカー個別選択対応
         async function playCards() {
             if (selectedCards.length === 0) return;
             
@@ -748,7 +747,6 @@
                     const playedNum = mainCard.number;
                     const count = cardsToPlay.length;
 
-                    // 【修正】 革命・イレブンバック判定をここ(分岐の前)に移動
                     const effect = handleSpecialCards(cardsToPlay, gs);
                     gs = effect.newGameState;
 
@@ -773,21 +771,17 @@
                         // 特殊処理分岐
                         if (isSpade3) {
                             gs.status = 'awaiting_spade3_confirmation';
-                            // 【修正】承認配列を追加
                             gs.pendingAction = { type: 'spade3', playerId: currentUser.uid, acks: [] };
                         } else if (playedNum === 8) {
                             gs.status = 'awaiting_8giri_confirmation';
-                            // 【修正】承認配列を追加
                             gs.pendingAction = { type: '8-giri', playerId: currentUser.uid, acks: [] };
                         } else if (playedNum === 5) {
                             gs.status = 'awaiting_5skip_confirmation';
-                            // 【修正】承認配列を追加
                             gs.pendingAction = { type: '5-skip', playerId: currentUser.uid, count: count, acks: [] };
                         } else if (playedNum === 7 || playedNum === 10) {
                             gs.status = 'awaiting_selection';
                             gs.pendingAction = { type: playedNum === 7 ? '7-pass' : '10-discard', playerId: currentUser.uid, count: count };
                         } else {
-                            // 通常カードの処理 (革命判定は既に上で終わっているため削除)
                             if (!effect.skipTurn) {
                                 gs.currentPlayerId = getNextPlayerId(gs);
                             }
@@ -1044,10 +1038,8 @@
                     if (action.type === '7-pass') {
                         const nextId = getNextPlayerId(gs);
                         gs.hands[nextId].push(...cardsForSelection);
-                        
-                        // 【変更】 自動ソートを削除（受け取ったカードは末尾に追加される）
-                        // gs.hands[nextId].sort((a,b) => getCardStrength(a, gs.isRevolution, gs.isElevenBack) - getCardStrength(b, gs.isRevolution, gs.isElevenBack));
-                        
+                        // 【修正】 ここでソートするが、革命フラグは無視する（常に通常順）
+                        gs.hands[nextId].sort((a,b) => getCardStrength(a) - getCardStrength(b));
                         gs.lastEvent = { type: '7-pass', recipientId: nextId, senderName: gs.players.find(p=>p.id===currentUser.uid).name, cards: cardsForSelection, timestamp: Date.now() };
                     }
 
