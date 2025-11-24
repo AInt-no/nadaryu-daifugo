@@ -609,33 +609,44 @@
 
         async function startGame() {
             if (!currentRoomId) return;
+            // 【修正】 待機ルームに戻っていないプレイヤーのチェック
+            const missingPlayers = localRoomData.players.filter(p => p.view !== 'lobby');
+            if (missingPlayers.length > 0) {
+                const names = missingPlayers.map(p => p.name).join('\n');
+                if (!confirm(`以下のプレイヤーがまだ戻っていません:\n${names}\n\n強制的に退出させてゲームを開始しますか？`)) {
+                    return;
+                }
+            }
+
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
             try {
                  await runTransaction(db, async (transaction) => {
                     const roomDoc = await transaction.get(roomRef);
                     if (!roomDoc.exists()) return;
                     const roomData = roomDoc.data();
-                    if (roomData.players.length < 2) throw new Error("2人以上必要です。");
                     
+                    // 【修正】 ロビーにいるプレイヤーのみで開始
+                    const validPlayers = roomData.players.filter(p => p.view === 'lobby');
+                    if (validPlayers.length < 2) throw new Error("プレイヤーが足りません");
+
                     const deck = shuffle(createDeck());
                     const hands = {};
-                    roomData.players.forEach(p => hands[p.id] = []);
+                    validPlayers.forEach(p => hands[p.id] = []);
                     let idx = 0;
                     deck.forEach(c => {
-                        hands[roomData.players[idx].id].push(c);
-                        idx = (idx + 1) % roomData.players.length;
+                        hands[validPlayers[idx].id].push(c);
+                        idx = (idx + 1) % validPlayers.length;
                     });
                     
-                    // 手札を通常の強さ順にソート
                     Object.keys(hands).forEach(pid => {
                         hands[pid].sort((a, b) => getCardStrength(a) - getCardStrength(b));
                     });
 
-                    const sortedPlayers = [...roomData.players].sort((a, b) => (a.rank || 99) - (b.rank || 99));
+                    const sortedPlayers = [...validPlayers].sort((a, b) => (a.rank || 99) - (b.rank || 99));
                     const playOrder = sortedPlayers.map(p => p.id);
 
                     let currentPlayerId;
-                    const loser = roomData.players.find(p => p.rank === roomData.players.length);
+                    const loser = validPlayers.find(p => p.rank === validPlayers.length);
                     if (loser) {
                         currentPlayerId = loser.id;
                     } else {
@@ -643,7 +654,7 @@
                         currentPlayerId = d3Owner || playOrder[0];
                     }
                     
-                    const playersInGame = roomData.players.map(p => ({ ...p, cardCount: hands[p.id].length, rank: null }));
+                    const playersInGame = validPlayers.map(p => ({ ...p, cardCount: hands[p.id].length, rank: null }));
                     
                     const newGameState = {
                         status: 'playing',
@@ -661,7 +672,7 @@
                     
                     transaction.update(roomRef, { 
                         gameState: newGameState, 
-                        players: roomData.players.map(p => ({ ...p, view: 'game' })), 
+                        players: validPlayers.map(p => ({ ...p, view: 'game' })), 
                         lastGameResult: deleteField() 
                     });
                  });
@@ -738,7 +749,7 @@
                 
                 // ミス回数のカウントアップ
                 let currentCount = (players[playerIdx].penaltyCount || 0) + 1;
-                players[playerIdx].penaltyCount = currentCount; // 一旦更新
+                players[playerIdx].penaltyCount = currentCount;
 
                 // 罰則情報作成
                 gs.penalty = {
@@ -919,9 +930,6 @@
 
                     // 【修正】 ドボン失敗時の罰則処理 (計算値は出さない)
                     if (handSum !== fieldSum) {
-                        // ここで処理を中断し、罰則をトリガーする
-                        // トランザクション内では他の関数を呼び出さない方が安全なため、フラグを立てて後続処理
-                        // ですが、ここでは罰則ロジックを統合します
                         const players = roomDoc.data().players;
                         const playerIdx = players.findIndex(p => p.id === currentUser.uid);
                         let currentCount = (players[playerIdx].penaltyCount || 0) + 1;
@@ -937,7 +945,7 @@
                             const rankings = players.filter(p => p.id !== currentUser.uid).map(p => p.id);
                             rankings.push(currentUser.uid);
                             
-                            // 敗北者のカウントリセット
+                            // 【修正】 敗北者のカウントリセット
                             players[playerIdx].penaltyCount = 0;
 
                             transaction.update(roomRef, { 
@@ -1285,6 +1293,10 @@
             const list = document.getElementById('player-list');
             list.innerHTML = '';
             data.players.forEach(p => {
+                const badge = p.view === 'lobby' 
+                    ? '<span class="bg-green-500 text-white text-xs px-2 py-1 rounded font-bold ml-2">準備OK</span>' 
+                    : '<span class="bg-gray-500 text-gray-300 text-xs px-2 py-1 rounded font-bold ml-2">確認中</span>';
+
                 const li = document.createElement('li');
                 li.className = 'bg-slate-700/50 p-3 rounded-lg flex justify-between items-center border border-slate-600';
                 li.innerHTML = `
@@ -1292,6 +1304,7 @@
                         <div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center font-bold text-sm">${p.name.substring(0,1)}</div>
                         <span>${p.name}</span>
                         ${p.penaltyCount > 0 ? `<span class="text-xs text-red-400 border border-red-500 px-1 rounded">⚠${p.penaltyCount}</span>` : ''}
+                        ${badge}
                     </div>
                     ${p.id === data.hostId ? '<span class="text-xs bg-yellow-500 text-slate-900 px-2 py-1 rounded font-bold">HOST</span>' : ''}
                 `;
@@ -1300,7 +1313,7 @@
             const btn = document.getElementById('start-game-btn');
             if (currentUser.uid === data.hostId) {
                 btn.classList.remove('hidden');
-                btn.disabled = data.players.length < 2;
+                // btn.disabled = data.players.length < 2; // ロジック内でチェックするのでボタンは常に押せるようにする
             } else {
                 btn.classList.add('hidden');
             }
@@ -1423,7 +1436,6 @@
             if (gs.status === 'awaiting_dobon_acknowledgement') showDobonModal(gs);
         }
         
-        // ... (createCardEl, toggleSelect, promptJokerSuit, etc. are same as before) ...
         function createCardEl(c) {
             const div = document.createElement('div');
             div.className = 'card';
@@ -1535,7 +1547,6 @@
             const list = document.getElementById('rankings-list');
             list.innerHTML = '';
             
-            // 【修正】 2アウト失格時の表示ロジック
             const resultType = roomData.lastGameResult.resultType;
             
             if (resultType === 'disqualification') {
