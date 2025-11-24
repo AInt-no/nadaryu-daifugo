@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>灘流大富豪 (Rev.3)</title>
+    <title>灘流大富豪</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap');
@@ -610,6 +610,7 @@
 
         async function startGame() {
             if (!currentRoomId) return;
+            // 【修正】 待機ルームに戻っていないプレイヤーのチェックと強制除外
             const missingPlayers = localRoomData.players.filter(p => p.view !== 'lobby');
             if (missingPlayers.length > 0) {
                 const names = missingPlayers.map(p => p.name).join('\n');
@@ -625,7 +626,7 @@
                     if (!roomDoc.exists()) return;
                     const roomData = roomDoc.data();
                     
-                    // ロビーにいるプレイヤーのみで開始
+                    // 【修正】 ロビーにいるプレイヤーのみで開始
                     const validPlayers = roomData.players.filter(p => p.view === 'lobby');
                     if (validPlayers.length < 2) throw new Error("プレイヤーが足りません");
 
@@ -671,6 +672,7 @@
                         lastActionTimestamp: new Date().toISOString()
                     };
                     
+                    // 参加しなかったプレイヤーは削除される
                     transaction.update(roomRef, { 
                         gameState: newGameState, 
                         players: validPlayers.map(p => ({ ...p, view: 'game' })), 
@@ -1287,6 +1289,13 @@
                         document.getElementById('penalty-modal').classList.add('hidden');
                     }, 3000);
                 }
+                
+                // 【追加】 試合中に1人になった場合の強制終了チェック
+                if (localRoomData.gameState && localRoomData.players.length < 2) {
+                    alert("他のプレイヤーが退出したため、ゲームを終了します。");
+                    handleLeaveGame();
+                    return;
+                }
             });
         }
 
@@ -1313,19 +1322,20 @@
                 list.appendChild(li);
             });
             const btn = document.getElementById('start-game-btn');
-            // 試合中はゲーム開始ボタンを表示するが、クリック時に警告が出るように変更済み
             if (currentUser.uid === data.hostId) {
+                // ホストならボタンを表示、ただしゲーム中は押せない
                  const isGameActive = data.gameState && data.gameState.status !== 'finished';
                  if (isGameActive) {
                      document.getElementById('lobby-status-message').classList.remove('hidden');
-                     btn.disabled = true; // 試合中は押せないようにする
-                     btn.classList.add('hidden'); // または隠す
+                     btn.disabled = true;
+                     btn.classList.add('hidden');
                  } else {
                      document.getElementById('lobby-status-message').classList.add('hidden');
                      btn.disabled = false;
                      btn.classList.remove('hidden');
                  }
             } else {
+                // ゲストならメッセージだけ（ゲーム中なら）
                 document.getElementById('lobby-status-message').classList.toggle('hidden', !data.gameState);
                 btn.classList.add('hidden');
             }
@@ -1364,7 +1374,6 @@
             infoDiv.innerHTML = '';
             if (gs.isRevolution) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-red-600 px-2 py-1 rounded shadow-lg animate-pulse">革命</span>';
             if (gs.isElevenBack) infoDiv.innerHTML += '<span class="text-xs font-bold text-white bg-blue-500 px-2 py-1 rounded shadow-lg">11Back</span>';
-            // 【修正】 縛りの表示をマークに変更
             if (gs.field.suitLock) {
                 const suitMap = { S: '♠', H: '♥', D: '♦', C: '♣' };
                 const lockStr = gs.field.suitLock.split('').map(s => suitMap[s]).join('');
@@ -1397,7 +1406,6 @@
                 otherDiv.appendChild(div);
             });
 
-            // 自分のターンの強調表示
             const myHandArea = document.getElementById('my-hand-area');
             const isTurn = gs.currentPlayerId === currentUser.uid && !finished;
             
@@ -1561,7 +1569,6 @@
             const list = document.getElementById('rankings-list');
             list.innerHTML = '';
             
-            // 【修正】 2アウト失格時の表示ロジック
             const resultType = roomData.lastGameResult.resultType;
             
             if (resultType === 'disqualification') {
