@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>灘流大富豪</title>
+    <title>灘流大富豪 (Rev.3)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap');
@@ -192,6 +192,15 @@
             cursor: pointer;
             box-shadow: 0 2px 5px rgba(0,0,0,0.3);
         }
+        
+        /* --- 罰則カットイン --- */
+        #penalty-modal {
+            background-color: rgba(153, 27, 27, 0.9) !important; /* 濃い赤 */
+            z-index: 2000;
+        }
+        .penalty-text {
+            text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+        }
     </style>
 </head>
 <body class="text-white h-screen overflow-hidden bg-slate-900">
@@ -271,6 +280,13 @@
 
         <div id="message-modal" class="hidden modal-overlay z-[2000]">
             <div id="message-content" class="bg-slate-800 text-white px-8 py-4 rounded-full shadow-2xl font-bold border border-slate-600 flex items-center gap-2"></div>
+        </div>
+
+        <div id="penalty-modal" class="hidden modal-overlay">
+            <div class="text-center">
+                <h1 id="penalty-title" class="text-6xl md:text-8xl font-black text-yellow-400 penalty-text animate-pulse mb-8"></h1>
+                <div id="penalty-detail" class="text-2xl md:text-4xl font-bold text-white bg-black/50 px-8 py-4 rounded-xl inline-block border-2 border-red-500"></div>
+            </div>
         </div>
 
         <div id="selection-modal" class="hidden modal-overlay">
@@ -378,6 +394,7 @@
         let localRoomData = {};
         let localGameState = {};
         let acknowledgedEventTimestamp = null;
+        let lastPenaltyTime = null;
         let jokerAssignmentState = { jokers: [], currentIndex: 0, usedSuits: [] };
 
         const SUITS = ['S', 'H', 'D', 'C'];
@@ -706,8 +723,36 @@
             promptNextJokerSuit();
         }
 
+        // 【追加】 罰則トリガー関数
+        async function triggerPenalty(reason) {
+            const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            await runTransaction(db, async (transaction) => {
+                const roomDoc = await transaction.get(roomRef);
+                if (!roomDoc.exists()) return;
+                const gs = roomDoc.data().gameState;
+                const player = gs.players.find(p => p.id === currentUser.uid);
+                
+                gs.penalty = {
+                    playerName: player.name,
+                    reason: reason,
+                    timestamp: Date.now()
+                };
+                transaction.update(roomRef, { gameState: gs });
+            });
+        }
+
         async function executePlay(cardsToPlay) {
             const roomRef = doc(db, `artifacts/${appId}/public/data/daifugo-rooms`, currentRoomId);
+            
+            // ローカル検証NGなら罰則トリガーして終了
+            const dummyGs = localGameState; // 簡易チェック用
+            const validation = isValidPlay(cardsToPlay, dummyGs.field, dummyGs.isRevolution, dummyGs.isElevenBack);
+            if (!validation.valid) {
+                await triggerPenalty(validation.message);
+                selectedCards = [];
+                return;
+            }
+
             try {
                 await runTransaction(db, async (transaction) => {
                     const roomDoc = await transaction.get(roomRef);
@@ -718,6 +763,7 @@
                     
                     if (currentUser.uid !== gs.currentPlayerId) throw new Error("手番ではありません。");
                     
+                    // トランザクション内でも再検証（不正防止）
                     const validation = isValidPlay(cardsToPlay, gs.field, gs.isRevolution, gs.isElevenBack);
                     if (!validation.valid) throw new Error(validation.message);
 
@@ -791,6 +837,7 @@
                 });
                 selectedCards = [];
             } catch (e) {
+                // ここに来るエラーはアラート表示だけにする（罰則は既に上で処理済み）
                 console.error(e);
                 showMessage(e.message);
             }
@@ -838,7 +885,17 @@
                     const handSum = myHand.reduce((s, c) => s + (c.suit==='JOKER'?0:c.number), 0);
                     const fieldSum = field.reduce((s, c) => s + (c.suit==='JOKER'?0:c.number), 0);
 
-                    if (handSum !== fieldSum) throw new Error(`不一致！ 手札:${handSum} 場:${fieldSum}`);
+                    // 【修正】 ドボン失敗時の罰則処理
+                    if (handSum !== fieldSum) {
+                        const player = gs.players.find(p => p.id === currentUser.uid);
+                        gs.penalty = {
+                            playerName: player.name,
+                            reason: "ドボン失敗 (計算ミス)",
+                            timestamp: Date.now()
+                        };
+                        transaction.update(roomRef, { gameState: gs });
+                        return; // 処理終了
+                    }
 
                     gs.status = 'awaiting_dobon_acknowledgement';
                     gs.rankings.push(currentUser.uid);
@@ -857,7 +914,6 @@
         }
 
         // --- Special Card Handlers ---
-        // 【修正】 復活させた関数
         function handleSpecialCards(played, gs) {
             const nonJokers = played.filter(c => c.suit !== 'JOKER');
             const nums = [...new Set(nonJokers.map(c => c.number))];
@@ -894,28 +950,28 @@
         }
 
         function isValidPlay(played, field, isRev, is11Back) {
-            if (!played.length) return { valid: false, message: "選択してください" };
+            if (!played.length) return { valid: false, message: "カードを選択してください。" };
             
             const playIsJoker = played.length === 1 && played[0].suit === 'JOKER';
             const playIsSpade3 = played.length === 1 && played[0].suit === 'S' && played[0].number === 3;
             const fieldIsJoker = field.cards.length === 1 && field.cards[0].suit === 'JOKER';
 
             const nums = played.map(c => c.suit==='JOKER' ? null : c.number).filter(n => n !== null);
-            if ([...new Set(nums)].length > 1) return { valid: false, message: "同じ数字のみ出せます" };
+            if ([...new Set(nums)].length > 1) return { valid: false, message: "同じ数字のカードしか出せません。" };
 
             if (fieldIsJoker && playIsSpade3) return { valid: true, newSuitLock: null };
 
             if (field.cards.length > 0) {
-                if (played.length !== field.cards.length) return { valid: false, message: "枚数が違います" };
+                if (played.length !== field.cards.length) return { valid: false, message: "場と同じ枚数を出してください。" };
 
                 const pStr = getCardStrength(played.find(c => c.suit!=='JOKER')||played[0], isRev, is11Back);
                 const fStr = getCardStrength(field.cards.find(c => c.suit!=='JOKER')||field.cards[0], isRev, is11Back);
 
-                if (pStr <= fStr) return { valid: false, message: "弱いカードは出せません" };
+                if (pStr <= fStr) return { valid: false, message: "場よりも強いカードを出してください。" };
 
                 if (field.suitLock) {
                     const pSuits = getCombinedSuits(played);
-                    if (pSuits !== field.suitLock) return { valid: false, message: `縛り！[${field.suitLock}]のみ可` };
+                    if (pSuits !== field.suitLock) return { valid: false, message: `縛りが発生しています！[${field.suitLock}]` };
                 }
             }
 
@@ -1148,6 +1204,18 @@
                     acknowledgedEventTimestamp = localGameState.lastEvent.timestamp;
                     showReceivedCards(localGameState.lastEvent);
                 }
+
+                // --- 罰則表示の検知 ---
+                if (localGameState.penalty && localGameState.penalty.timestamp !== lastPenaltyTime) {
+                    lastPenaltyTime = localGameState.penalty.timestamp;
+                    const p = localGameState.penalty;
+                    document.getElementById('penalty-title').textContent = `${p.playerName} 眼科！！`;
+                    document.getElementById('penalty-detail').textContent = p.reason;
+                    document.getElementById('penalty-modal').classList.remove('hidden');
+                    setTimeout(() => {
+                        document.getElementById('penalty-modal').classList.add('hidden');
+                    }, 3000); // 3秒表示
+                }
             });
         }
 
@@ -1292,6 +1360,7 @@
             if (gs.status === 'awaiting_dobon_acknowledgement') showDobonModal(gs);
         }
         
+        // ... (createCardEl, toggleSelect, promptJokerSuit, etc. are same as before) ...
         function createCardEl(c) {
             const div = document.createElement('div');
             div.className = 'card';
